@@ -8,7 +8,7 @@ router.get("/", async (req, res) => {
   try {
     const id = positiveInt(req.params.id);
     const alert = await prisma.alert.findUnique({
-      where: { id },
+      where: { id, prescription: { userId: req.userId } },
     });
     if (!alert) return res.status(404).json({ message: "alert not found" });
     return res.json({ alert });

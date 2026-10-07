@@ -13,7 +13,7 @@ router.post("/", async (req, res) => {
     const foodIds = req.body?.foodIds === undefined ? undefined : idList(req.body.foodIds, "foodIds");
     const result = await prisma.$transaction(async (db) => {
       const prescription = await db.prescription.findUnique({
-        where: { id: prescriptionId }, include: { medicines: true },
+        where: { id: prescriptionId, userId: req.userId }, include: { medicines: true },
       });
       if (!prescription) {
         const error = new Error("Prescription not found");

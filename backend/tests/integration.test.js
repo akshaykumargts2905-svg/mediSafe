@@ -5,21 +5,27 @@ const fs = require("node:fs");
 const path = require("node:path");
 const app = require("../server");
 const prisma = require("../lib/prisma");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const { signToken } = require("../lib/auth");
 
 // Run explicitly: this suite creates temporary records in DATABASE_URL and removes them.
-test("all endpoints against PostgreSQL, including analysis and cascading deletes", { timeout: 240000 }, async () => {
+test("all endpoints against PostgreSQL, including analysis and cascading deletes", { timeout: 480000 }, async () => {
   const server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
   const base = "http://127.0.0.1:" + server.address().port;
   const tag = "api-test-" + Date.now() + "-" + process.pid;
   let userId;
+  let otherUserId;
+  let token;
+  const originalEditors = process.env.CATALOG_EDITOR_IDS;
   const medicineIds = [];
   const foodIds = [];
   const seen = new Set();
 
   async function call(method, url, body, expected = 200, headers = {}) {
     const response = await fetch(base + url, {
-      method, headers: { "Content-Type": "application/json", ...headers },
+      method, headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}), ...headers },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const data = await response.json();
@@ -31,16 +37,28 @@ test("all endpoints against PostgreSQL, including analysis and cascading deletes
 
   try {
     await call("GET", "/");
-    await call("GET", "/api/languages");
-    await call("POST", "/api/translate", { text: "Hello", language: "hi" });
+    await call("GET", "/api/users/me", undefined, 401);
     const credentials = { name: tag, email: tag + "@example.com", password: "demo-password" };
     const registered = await call("POST", "/api/auth/register", credentials, 201);
     userId = registered.user.id;
     await call("POST", "/api/auth/register", credentials, 409);
+    token = (await call("POST", "/api/auth/login", credentials)).token;
+    assert.equal(typeof token, "string");
+    const storedUser = await prisma.user.findUnique({ where: { id: userId } });
+    assert.notEqual(storedUser.password, credentials.password);
+    assert.equal(await bcrypt.compare(credentials.password, storedUser.password), true);
+    assert.equal(bcrypt.getRounds(storedUser.password), 12);
+    const payload = jwt.decode(token);
+    assert.deepEqual(Object.keys(payload).sort(), ["aud", "exp", "iat", "iss", "userId"].sort());
+    const hashBeforeLogin = storedUser.password;
     await call("POST", "/api/auth/login", credentials);
+    assert.equal((await prisma.user.findUnique({ where: { id: userId } })).password, hashBeforeLogin);
+    process.env.CATALOG_EDITOR_IDS = String(userId);
+    await call("GET", "/api/languages");
+    await call("POST", "/api/translate", { text: "Hello", language: "hi" });
     await call("POST", "/api/auth/login", { ...credentials, password: "wrong" }, 401);
-    const userHeaders = { "x-user-id": String(userId) };
-    await call("GET", "/api/users/me", undefined, 200, userHeaders);
+    const userHeaders = { "x-user-id": "2147483647" }; // Spoofed legacy header must be ignored.
+    assert.equal((await call("GET", "/api/users/me", undefined, 200, userHeaders)).user.id, userId);
     await call("PUT", "/api/users/me", { name: tag + "-updated" }, 200, userHeaders);
     const { prescription } = await call("POST", "/api/prescriptions", { userId, fileName: tag + ".txt" }, 201);
     const pid = prescription.id;
@@ -129,6 +147,66 @@ test("all endpoints against PostgreSQL, including analysis and cascading deletes
     }, 201);
     await call("PUT", "/api/doctor/recommendations/" + recommendation.id, { status: "REVIEWED" });
     assert.equal((await call("GET", "/api/doctor/recommendations/" + pid)).recommendations.length, 1);
+    console.log("CRUD and analysis checks passed; checking isolation between two users.");
+    const { user: otherUser } = await call("POST", "/api/auth/register", {
+      name: tag + "-other", email: tag + "-other@example.com", password: "other-password",
+    }, 201);
+    otherUserId = otherUser.id;
+    const otherToken = (await call("POST", "/api/auth/login", {
+      email: otherUser.email, password: "other-password",
+    })).token;
+    const otherHeaders = { Authorization: "Bearer " + otherToken, "x-user-id": String(userId) };
+    assert.equal((await call("GET", "/api/users/me", undefined, 200, otherHeaders)).user.id, otherUserId);
+    // Every private route family must reject another user's resource IDs.
+    const denied = [
+      ["GET", "/api/prescriptions/" + pid],
+      ["DELETE", "/api/prescriptions/" + pid],
+      ["GET", "/api/prescriptions/" + pid + "/medicines"],
+      ["POST", "/api/prescriptions/" + pid + "/medicines", { medicineId: a }],
+      ["PUT", "/api/prescriptions/" + pid + "/medicines/" + a, { dosage: "tamper" }],
+      ["DELETE", "/api/prescriptions/" + pid + "/medicines/" + a],
+      ["GET", "/api/ocr/" + pid],
+      ["POST", "/api/ocr/process/" + pid, { extractedText: "tamper" }],
+      ["PUT", "/api/ocr/" + pid, { extractedText: "tamper" }],
+      ["GET", "/api/alerts/" + alert.id],
+      ["PATCH", "/api/alerts/" + alert.id + "/read"],
+      ["DELETE", "/api/alerts/" + alert.id],
+      ["POST", "/api/alerts", { prescriptionId: pid, type: "MANUAL", severity: "LOW", title: "tamper", message: "tamper" }],
+      ["GET", "/api/safety-reports/" + pid],
+      ["POST", "/api/safety-reports/generate/" + pid],
+      ["POST", "/api/analyze/" + pid],
+      ["GET", "/api/doctor/prescriptions/" + pid],
+      ["GET", "/api/doctor/recommendations/" + pid],
+      ["POST", "/api/doctor/recommendations", { prescriptionId: pid, medicineId: a, reason: "tamper" }],
+      ["PUT", "/api/doctor/recommendations/" + recommendation.id, { reason: "tamper" }],
+    ];
+    for (const [method, url, body] of denied) await call(method, url, body, 404, otherHeaders);
+    await call("POST", "/api/prescriptions", { userId, fileName: "tamper.txt" }, 403, otherHeaders);
+    for (const url of ["/api/prescriptions", "/api/doctor/prescriptions"]) {
+      assert.equal((await call("GET", url, undefined, 200, otherHeaders)).prescriptions.length, 0);
+      await call("GET", url + "?userId=" + userId, undefined, 403, otherHeaders);
+    }
+    for (const url of ["/api/alerts", "/api/doctor/alerts", "/api/safety-reports"]) {
+      const data = await call("GET", url + "?prescriptionId=" + pid, undefined, 200, otherHeaders);
+      assert.equal((data.alerts || data.reports).length, 0);
+    }
+    const dashboard = await call("GET", "/api/doctor/dashboard", undefined, 200, otherHeaders);
+    assert.equal(dashboard.prescriptions, 0);
+    assert.equal(dashboard.unreadAlerts, 0);
+    for (const url of ["/api/medicines", "/api/foods", "/api/drug-interactions", "/api/food-interactions"]) {
+      await call("POST", url, {}, 403, otherHeaders);
+    }
+    await call("DELETE", "/api/medicines/" + a, undefined, 403, otherHeaders);
+    await call("PUT", "/api/users/me", { password: "changed-password" }, 200, otherHeaders);
+    await call("POST", "/api/auth/login", { email: otherUser.email, password: "other-password" }, 401);
+    await call("POST", "/api/auth/login", { email: otherUser.email, password: "changed-password" });
+    const updatedUser = await prisma.user.findUnique({ where: { id: otherUserId } });
+    assert.equal(await bcrypt.compare("changed-password", updatedUser.password), true);
+    await call("GET", "/api/users/me", undefined, 401, { Authorization: "Bearer " + token + "tampered" });
+    const expiredToken = jwt.sign({ userId }, process.env.JWT_SECRET, {
+      algorithm: "HS256", expiresIn: -1, issuer: "medisafe-api", audience: "medisafe-client",
+    });
+    await call("GET", "/api/users/me", undefined, 401, { Authorization: "Bearer " + expiredToken });
     await call("GET", "/api/knowledge-graph");
     assert.equal((await call("GET", "/api/knowledge-graph/medicine/" + a)).medicine.foodInteractions.length, 1);
     assert.equal((await call("GET", "/api/knowledge-graph/medicine/" + b)).medicine.interactionsAsB.length, 1);
@@ -148,7 +226,7 @@ test("all endpoints against PostgreSQL, including analysis and cascading deletes
     for (const id of medicineIds) await call("DELETE", "/api/medicines/" + id);
     await call("DELETE", "/api/foods/" + food.id);
     await call("DELETE", "/api/users/me", undefined, 200, userHeaders);
-    await call("GET", "/api/users/me", undefined, 404, userHeaders);
+    await call("GET", "/api/users/me", undefined, 401, userHeaders);
     const source = fs.readFileSync(path.join(__dirname, "../server.js"), "utf8");
     const mounts = [...source.matchAll(/app\.use\("([^"]+)", require\("\.\/routes\/([^"]+)"\)\);/g)];
     for (const [, url, file] of mounts) {
@@ -162,9 +240,12 @@ test("all endpoints against PostgreSQL, including analysis and cascading deletes
     // Delete only records created by this test, even after a failed assertion.
     try {
       if (userId) await prisma.user.deleteMany({ where: { id: userId } });
+      if (otherUserId) await prisma.user.deleteMany({ where: { id: otherUserId } });
       if (medicineIds.length) await prisma.medicine.deleteMany({ where: { id: { in: medicineIds } } });
       if (foodIds.length) await prisma.food.deleteMany({ where: { id: { in: foodIds } } });
     } finally {
+      if (originalEditors === undefined) delete process.env.CATALOG_EDITOR_IDS;
+      else process.env.CATALOG_EDITOR_IDS = originalEditors;
       await new Promise((resolve) => server.close(resolve));
       await prisma.$disconnect();
     }

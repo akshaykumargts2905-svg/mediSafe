@@ -8,7 +8,7 @@ router.post("/", async (req, res) => {
   try {
     const prescriptionId = positiveInt(req.params.prescriptionId, "prescriptionId");
     const report = await prisma.$transaction(async (db) => {
-      if (!await db.prescription.findUnique({ where: { id: prescriptionId } })) {
+      if (!await db.prescription.findUnique({ where: { id: prescriptionId, userId: req.userId } })) {
         const error = new Error("Prescription not found");
         error.status = 404;
         throw error;

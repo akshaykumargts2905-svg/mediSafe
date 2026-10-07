@@ -9,7 +9,7 @@ router.delete("/", async (req, res) => {
     const prescriptionId = positiveInt(req.params.id);
     const medicineId = positiveInt(req.params.medicineId, "medicineId");
     await prisma.prescriptionMedicine.delete({
-      where: { prescriptionId_medicineId: { prescriptionId, medicineId } },
+      where: { prescriptionId_medicineId: { prescriptionId, medicineId }, prescription: { userId: req.userId } },
     });
     return res.json({ message: "Medicine removed from prescription" });
   } catch (error) {

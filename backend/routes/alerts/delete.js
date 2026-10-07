@@ -7,7 +7,7 @@ const sendError = require("../../lib/errors");
 router.delete("/", async (req, res) => {
   try {
     const id = positiveInt(req.params.id);
-    await prisma.alert.delete({ where: { id } });
+    await prisma.alert.delete({ where: { id, prescription: { userId: req.userId } } });
     return res.json({ message: "Alert deleted" });
   } catch (error) {
     return sendError(res, error);

@@ -6,10 +6,11 @@ const sendError = require("../../lib/errors");
 
 router.post("/", async (req, res) => {
   try {
-    const data = readFields(req.body, {"userId":"id","fileName":"string","fileUrl":"string?","ocrText":"string?"}, ["userId","fileName"]);
-    if (!await prisma.user.findUnique({ where: { id: data.userId } })) {
-      return res.status(404).json({ message: "user not found" });
+    const data = readFields(req.body, {"userId":"id","fileName":"string","fileUrl":"string?","ocrText":"string?"}, ["fileName"]);
+    if (data.userId !== undefined && data.userId !== req.userId) {
+      return res.status(403).json({ message: "Cannot create prescriptions for another user" });
     }
+    data.userId = req.userId;
     const prescription = await prisma.prescription.create({ data });
     return res.status(201).json({ prescription });
   } catch (error) {

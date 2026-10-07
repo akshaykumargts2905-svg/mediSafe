@@ -12,7 +12,7 @@ router.put("/", async (req, res) => {
     if (data.confidence !== undefined && data.confidence !== null && (data.confidence < 0 || data.confidence > 1)) {
       throw badRequest("confidence must be between 0 and 1");
     }
-    if (!await prisma.prescription.findUnique({ where: { id: prescriptionId } })) {
+    if (!await prisma.prescription.findUnique({ where: { id: prescriptionId, userId: req.userId } })) {
       return res.status(404).json({ message: "Prescription not found" });
     }
     // Placeholder: the caller supplies extracted text; no OCR engine is used.

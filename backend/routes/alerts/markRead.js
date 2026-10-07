@@ -7,7 +7,7 @@ const sendError = require("../../lib/errors");
 router.patch("/", async (req, res) => {
   try {
     const id = positiveInt(req.params.id);
-    const alert = await prisma.alert.update({ where: { id }, data: { isRead: true } });
+    const alert = await prisma.alert.update({ where: { id, prescription: { userId: req.userId } }, data: { isRead: true } });
     return res.json({ alert });
   } catch (error) {
     return sendError(res, error);

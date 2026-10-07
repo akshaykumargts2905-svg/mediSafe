@@ -1,6 +1,6 @@
 # MediSafe REST API
 
-Simple CommonJS Node.js + Express + Prisma + PostgreSQL backend using the existing eleven Prisma models. Each endpoint has its own route file and an async handler with try/catch. There are 59 requested API endpoints plus the health endpoint. No JWT, external OCR, translation service, AI service, or Neo4j is used.
+Simple CommonJS Node.js + Express + Prisma + PostgreSQL backend using the existing eleven Prisma models. Each endpoint has its own route file and an async handler with try/catch. There are 59 requested API endpoints plus the health endpoint. Authentication uses JWT Bearer tokens and bcrypt (12 rounds). No external OCR, translation service, AI service, or Neo4j is used.
 
 ## Setup
 
@@ -11,6 +11,9 @@ Put your database connection in **backend/.env** (the existing file is preserved
 ```dotenv
 DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DATABASE?schema=public"
 PORT=5000
+JWT_SECRET=replace-with-a-unique-random-secret-of-at-least-32-bytes
+JWT_EXPIRES_IN=1d
+CATALOG_EDITOR_IDS=
 ```
 
 For a fresh checkout, copy `.env.example` to `.env` and replace the placeholders. Keep any connection options your PostgreSQL provider requires. Never commit credentials.
@@ -26,6 +29,126 @@ npm run dev
 The initial migration already exists and was applied in this workspace. The migration command above checks for pending development changes; do not reset the database. To apply checked-in migrations in a deployment, use `npx prisma migrate deploy`. Use `npm start` to run without nodemon.
 
 Base URL: **http://localhost:5000**.
+
+## Authentication and security
+
+The existing schema, route URLs and JSON resource keys are unchanged. Login now adds a `token` field. API clients must send that token for every `/api/*` route except registration and login. The root health endpoint remains public.
+
+Only email is supported for login because the existing schema has no phone or username identifier.
+
+### Configuration
+
+Required packages added: **bcryptjs** and **jsonwebtoken**.
+
+```powershell
+cd backend
+npm install
+npm run passwords:upgrade
+npm run dev
+```
+
+No schema migration or database reset is required for this security update. The upgrade command is idempotent: it hashes existing plaintext passwords, preserves existing bcrypt hashes exactly and never logs passwords. Null passwords are left alone. Recognizable unsupported hash formats or passwords over bcrypt's 72-byte limit are preserved and reported as requiring an administrator-assisted password reset; this project does not add a reset endpoint or allow plaintext login.
+
+The local `.env` has already been configured with a cryptographically random JWT secret. On another machine, generate a fresh secret locally, put it in `JWT_SECRET`, and never commit it:
+
+```powershell
+node -e "console.log(require('node:crypto').randomBytes(64).toString('hex'))"
+```
+
+`JWT_EXPIRES_IN=1d` sets a one-day lifetime; positive values such as `1h` also work. Startup fails if the secret is missing, short, or an obvious placeholder.
+
+`CATALOG_EDITOR_IDS` is a comma-separated list of trusted, existing user IDs that may create/update/delete shared medicines, foods and interaction records. It is empty by default, so those writes return 403. After choosing trusted accounts, set e.g. `CATALOG_EDITOR_IDS=7,12` using their real IDs and restart the server. This is a server-only permission setting, never a registration field. Any authenticated user can read the catalog and check interactions.
+
+### Login flow
+
+1. Validate and normalize the email; read the supplied password without trimming it.
+2. Find the user by email and verify the stored bcrypt hash with `bcrypt.compare()`.
+3. Return the same generic 401 response for a missing user, wrong password or unsupported/legacy plaintext password.
+4. Sign an HS256 JWT containing only `userId` plus issued-at, expiry, issuer and audience claims.
+5. Return `{ "user": { "id": 1, "name": "...", "email": "...", "createdAt": "..." }, "token": "..." }`. No password or hash is returned.
+
+Registration and password changes hash passwords with 12 rounds. New passwords must contain at least 8 characters and at most 72 UTF-8 bytes to prevent bcrypt truncation. Already stored hashes are never rehashed merely because a user logs in.
+
+### Ownership rules
+
+- `Authorization: Bearer <token>` is the only accepted identity. `x-user-id` is ignored.
+- The middleware verifies the signature, HS256 algorithm, expiry, issuer, audience and numeric user ID, then checks that the account still exists. Invalid, expired, missing and deleted-account tokens return 401.
+- Private queries include ownership conditions through `Prescription.userId`. Requesting another user's private resource returns 404 without confirming that it exists.
+- Prescription creation derives userId from the JWT. The old body userId field is still accepted if it matches; a different ID returns 403.
+- Private lists and doctor dashboard counts are scoped to the authenticated user. Query filters cannot override that scope.
+- The schema does not define doctor roles or doctor/patient permissions. Doctor endpoints retain their URLs but only access the caller's prescriptions. Being a catalog editor does not grant access to anyone else's private data.
+- Logout is client-side token removal. There is no refresh-token/session store; an issued token otherwise lasts until expiry or secret rotation. Password changes do not revoke previously issued JWTs. Deleted accounts are rejected immediately.
+
+### Register → login → protected request
+
+Use these requests in Postman, with raw JSON bodies:
+
+```http
+POST http://localhost:5000/api/auth/register
+Content-Type: application/json
+
+{"name":"Demo User","email":"demo@example.com","password":"demo-password"}
+```
+
+```http
+POST http://localhost:5000/api/auth/login
+Content-Type: application/json
+
+{"email":"demo@example.com","password":"demo-password"}
+```
+
+Copy `token` from the login response:
+
+```http
+GET http://localhost:5000/api/users/me
+Authorization: Bearer <token-from-login>
+```
+
+Creating a prescription no longer needs a userId:
+
+```http
+POST http://localhost:5000/api/prescriptions
+Authorization: Bearer <token-from-login>
+Content-Type: application/json
+
+{"fileName":"demo-prescription.txt"}
+```
+
+In Postman, set the collection's Authorization type to **Bearer Token**, value `{{token}}`, and use **No Auth** for register/login. Save the login token in its Tests/Post-response script:
+
+```javascript
+pm.collectionVariables.set("token", pm.response.json().token);
+```
+
+### Changed files for this security update
+
+```text
+Modified:
+  server.js
+  package.json, package-lock.json
+  .env (local only), .env.example
+  README.md
+  routes/auth/register.js, login.js
+  routes/users/getMe.js, updateMe.js, deleteMe.js
+  routes/prescriptions/create.js, getAll.js, getById.js, delete.js
+  routes/prescriptionMedicines/create.js, getAll.js, update.js, delete.js
+  routes/ocr/process.js, getByPrescription.js, update.js
+  routes/alerts/create.js, getAll.js, getById.js, markRead.js, delete.js
+  routes/safetyReports/generate.js, getByPrescription.js, getAll.js
+  routes/doctor/dashboard.js, getPrescriptions.js, getPrescriptionById.js
+  routes/doctor/getAlerts.js, createRecommendation.js, getRecommendations.js
+  routes/doctor/updateRecommendation.js
+  routes/analyze/analyzePrescription.js
+  tests/api.test.js, integration.test.js
+
+Created:
+  lib/auth.js, passwords.js
+  middleware/authenticate.js, catalogAccess.js
+  scripts/hash-existing-passwords.js
+  tests/auth.test.js
+```
+
+The existing `.gitignore` already ignores `.env`; no secret is added to tracked files.
 
 ## Folder structure
 
@@ -50,9 +173,17 @@ backend/
 │   ├── validation.js             # Small input-validation helpers
 │   ├── errors.js                 # JSON error responses
 │   ├── userFields.js             # Public user fields (no password)
-│   └── safetyReport.js           # Shared report calculation
+│   ├── safetyReport.js           # Shared report calculation
+│   ├── auth.js                   # JWT signing/configuration/verification
+│   └── passwords.js              # bcrypt helpers
+├── middleware/
+│   ├── authenticate.js
+│   └── catalogAccess.js
+├── scripts/
+│   └── hash-existing-passwords.js
 ├── tests/
 │   ├── api.test.js
+│   ├── auth.test.js
 │   └── integration.test.js
 └── routes/
     ├── health.js
@@ -140,10 +271,10 @@ backend/
 - Send JSON with `Content-Type: application/json`.
 - IDs are positive PostgreSQL integers. Unknown body fields are ignored. Updates must contain at least one editable field.
 - Create endpoints return **201**. Reads, updates, deletes, checks, analysis, report generation and OCR upserts return **200** with JSON.
-- Errors return `{ "message": "..." }`: **400** invalid input, **401** invalid login, **404** missing resource/route, **409** duplicate values, foreign-key conflicts or concurrent updates, **413** oversized JSON, **500** unexpected database/server errors.
+- Errors return `{ "message": "..." }`: **400** invalid input, **401** invalid login/token, **403** insufficient permission, **404** missing resource/route, **409** duplicate values, foreign-key conflicts or concurrent updates, **413** oversized JSON, **500** unexpected database/server errors.
 - Single results use keys such as `user`, `medicine`, `prescription`, `interaction`, `ocrResult`, `report` or `recommendation`. Lists use plural keys. Languages returns an array.
-- Login returns a user without a token or session. For all three `/api/users/me` endpoints, set **x-user-id** to the user's ID. This is a caller-supplied selector, not authentication. All routes, including doctor routes, are public in this MVP.
-- Passwords use the requested simple plain-text storage/comparison. Responses never include passwords. Password hashing and authenticated access are needed before using real accounts.
+- Login returns a safe user and JWT token. All subsequent API requests require an Authorization Bearer header; the authenticated user ID is available as `req.userId`.
+- Registration and password changes store bcrypt hashes; login uses bcrypt comparison. Responses never include passwords or hashes.
 - Nullable fields accept `null` to clear them. Email addresses are trimmed and lowercased. Empty strings are rejected.
 - A list with no results returns an empty array. Interaction checks with existing medicines/foods and no match return `{ "found": false, "interaction": null }`.
 - There is no file upload endpoint: prescription creation stores `fileName` and optional `fileUrl` metadata.
@@ -154,7 +285,7 @@ backend/
 | Method | URL | Purpose |
 | --- | --- | --- |
 | POST | `/api/auth/register` | Register a user |
-| POST | `/api/auth/login` | Check email/password; return user |
+| POST | `/api/auth/login` | Verify bcrypt password; return user and JWT |
 | GET | `/api/users/me` | get current user |
 | PUT | `/api/users/me` | update current user |
 | DELETE | `/api/users/me` | delete current user |
@@ -230,7 +361,7 @@ An asterisk indicates a field required on creation. PUT endpoints accept a parti
 | Register | `name*`, `email*`, `password*` |
 | Login | `email*`, `password*` |
 | Current user | `name`, `email`, `password` |
-| Prescription | `userId*`, `fileName*`, `fileUrl`, `ocrText` |
+| Prescription | `fileName*`, `fileUrl`, `ocrText`; optional `userId` must match JWT identity |
 | OCR | `extractedText*`, `confidence` (0–1), `language`, `status`; extractedText only required by POST |
 | Medicine | `name*`, `genericName`, `brandName`, `rxCui`, `atcCode` |
 | Prescription medicine | `medicineId*`, `dosage`, `frequency`, `duration`; PUT edits the last three fields |
@@ -264,7 +395,7 @@ Each analysis refreshes alerts of type ANALYSIS_DRUG_DRUG and ANALYSIS_DRUG_FOOD
 
 ## Postman walkthrough
 
-Set a Postman variable `baseUrl` to `http://localhost:5000`. Use raw JSON request bodies. Save returned IDs into the variables shown below; example data is synthetic and is not a clinical interaction dataset.
+Set a Postman variable `baseUrl` to `http://localhost:5000`. Use raw JSON request bodies and Bearer Token authorization for all protected requests. To run the catalog-writing examples, first add your real user ID to CATALOG_EDITOR_IDS in .env and restart. Save returned IDs into the variables shown below; example data is synthetic and is not a clinical interaction dataset.
 
 1. **Register:** POST `{{baseUrl}}/api/auth/register`
 
@@ -272,7 +403,7 @@ Set a Postman variable `baseUrl` to `http://localhost:5000`. Use raw JSON reques
    { "name": "Demo User", "email": "demo@example.com", "password": "demo-password" }
    ```
 
-   Save `user.id` as `userId`. Login with POST `/api/auth/login` using the email and password. GET `/api/users/me` with header `x-user-id: {{userId}}`.
+   Save `user.id` as `userId`. Login with POST `/api/auth/login` using the email and password. Save the response token as `token`. GET `/api/users/me` with header `Authorization: Bearer {{token}}`.
 
 2. **Create a prescription:** POST `{{baseUrl}}/api/prescriptions`
 
@@ -373,8 +504,8 @@ npm run test:integration
 npx prisma validate
 ```
 
-`npm test` checks every route's registration, required fields and invalid input, JSON handling, placeholders and Prisma error mapping without database queries.
+`npm test` checks route registration, validation, JSON errors, placeholders, Prisma errors, bcrypt registration/password updates, password upgrade idempotency, minimal JWT claims, missing/invalid/expired/tampered tokens, deleted users and catalog permissions using isolated mocks.
 
-`npm run test:integration` uses DATABASE_URL and exercises all endpoints through HTTP. It creates uniquely named synthetic records, tests repeated analysis, reverse pairs, relation queries and cascades, then removes only the records it created, including on assertion failure. Use a development database.
+`npm run test:integration` uses DATABASE_URL and exercises all endpoints through HTTP. It creates two uniquely named synthetic users, authenticates with real JWTs, tests hashes in PostgreSQL, repeated analysis, reverse pairs, relation queries, cascades and cross-user IDOR prevention across every private route family, then removes only the records it created, including on assertion failure. Catalog permissions are enabled only within the test process. Use a development database.
 
-Dependencies are intentionally limited to Express, dotenv and Prisma Client, plus Prisma CLI and nodemon for development. npm currently reports six high-severity findings in the existing Prisma/nodemon dependency trees; its suggested fixes are breaking downgrades and were not applied.
+Runtime dependencies are Express, dotenv, Prisma Client, bcryptjs and jsonwebtoken, plus Prisma CLI and nodemon for development. npm currently reports six high-severity findings in the existing Prisma/nodemon dependency trees; its suggested fixes are breaking downgrades and were not applied.

@@ -11,7 +11,7 @@ router.put("/", async (req, res) => {
     const data = readFields(req.body, { dosage: "string?", frequency: "string?", duration: "string?" });
     requireChanges(data);
     const prescriptionMedicine = await prisma.prescriptionMedicine.update({
-      where: { prescriptionId_medicineId: { prescriptionId, medicineId } }, data,
+      where: { prescriptionId_medicineId: { prescriptionId, medicineId }, prescription: { userId: req.userId } }, data,
     });
     return res.json({ prescriptionMedicine });
   } catch (error) {

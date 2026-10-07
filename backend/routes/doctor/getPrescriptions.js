@@ -6,8 +6,10 @@ const sendError = require("../../lib/errors");
 
 router.get("/", async (req, res) => {
   try {
-    const where = {};
-    if (req.query.userId !== undefined) where.userId = positiveInt(req.query.userId, "userId");
+    const where = { userId: req.userId };
+    if (req.query.userId !== undefined && positiveInt(req.query.userId, "userId") !== req.userId) {
+      return res.status(403).json({ message: "Cannot access another user's prescriptions" });
+    }
     const prescriptions = await prisma.prescription.findMany({
       where, orderBy: { id: "desc" }, include: { user: { select: { id: true, name: true, email: true } }, medicines: { include: { medicine: true } }, reports: true },
     });

@@ -1,6 +1,10 @@
 require("dotenv").config();
 const express = require("express");
 const prisma = require("./lib/prisma");
+const authenticate = require("./middleware/authenticate");
+const catalogAccess = require("./middleware/catalogAccess");
+const { getAuthConfig } = require("./lib/auth");
+getAuthConfig(); // Fail at startup rather than issue tokens with a missing/default secret.
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
@@ -8,6 +12,10 @@ app.use(express.json({ limit: "1mb" }));
 // Each imported file defines exactly one endpoint.
 app.use("/api/auth/register", require("./routes/auth/register"));
 app.use("/api/auth/login", require("./routes/auth/login"));
+
+// All remaining API routes require a verified, existing user.
+app.use("/api", authenticate);
+app.use(["/api/medicines", "/api/foods", "/api/drug-interactions", "/api/food-interactions"], catalogAccess);
 app.use("/api/users/me", require("./routes/users/getMe"));
 app.use("/api/users/me", require("./routes/users/updateMe"));
 app.use("/api/users/me", require("./routes/users/deleteMe"));

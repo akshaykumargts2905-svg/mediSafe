@@ -6,7 +6,7 @@ const sendError = require("../../lib/errors");
 
 router.get("/", async (req, res) => {
   try {
-    const where = {};
+    const where = { prescription: { userId: req.userId } };
     if (req.query.prescriptionId !== undefined) where.prescriptionId = positiveInt(req.query.prescriptionId, "prescriptionId");
     const alerts = await prisma.alert.findMany({
       where, orderBy: { id: "desc" }, include: { prescription: true },

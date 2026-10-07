@@ -7,7 +7,7 @@ const sendError = require("../../lib/errors");
 router.post("/", async (req, res) => {
   try {
     const data = readFields(req.body, {"prescriptionId":"id","medicineId":"id","alternative":"string?","reason":"string","status":"string"}, ["prescriptionId","medicineId","reason"]);
-    if (!await prisma.prescription.findUnique({ where: { id: data.prescriptionId } })) {
+    if (!await prisma.prescription.findUnique({ where: { id: data.prescriptionId, userId: req.userId } })) {
       return res.status(404).json({ message: "prescription not found" });
     }
     if (!await prisma.medicine.findUnique({ where: { id: data.medicineId } })) {

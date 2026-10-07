@@ -7,7 +7,7 @@ const sendError = require("../../lib/errors");
 router.get("/", async (req, res) => {
   try {
     const prescriptionId = positiveInt(req.params.prescriptionId, "prescriptionId");
-    const report = await prisma.safetyReport.findFirst({ where: { prescriptionId }, orderBy: { id: "desc" } });
+    const report = await prisma.safetyReport.findFirst({ where: { prescriptionId, prescription: { userId: req.userId } }, orderBy: { id: "desc" } });
     if (!report) return res.status(404).json({ message: "Safety report not found" });
     return res.json({ report });
   } catch (error) {

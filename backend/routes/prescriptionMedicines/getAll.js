@@ -7,7 +7,7 @@ const sendError = require("../../lib/errors");
 router.get("/", async (req, res) => {
   try {
     const prescriptionId = positiveInt(req.params.id);
-    if (!await prisma.prescription.findUnique({ where: { id: prescriptionId } })) {
+    if (!await prisma.prescription.findUnique({ where: { id: prescriptionId, userId: req.userId } })) {
       return res.status(404).json({ message: "Prescription not found" });
     }
     const medicines = await prisma.prescriptionMedicine.findMany({

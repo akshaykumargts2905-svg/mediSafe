@@ -6,11 +6,11 @@ const sendError = require("../../lib/errors");
 router.get("/", async (req, res) => {
   try {
     const [users, prescriptions, medicines, unreadAlerts, pendingRecommendations] = await prisma.$transaction([
-      prisma.user.count(),
-      prisma.prescription.count(),
-      prisma.medicine.count(),
-      prisma.alert.count({ where: { isRead: false } }),
-      prisma.doctorRecommendation.count({ where: { status: "PENDING" } }),
+      prisma.user.count({ where: { id: req.userId } }),
+      prisma.prescription.count({ where: { userId: req.userId } }),
+      prisma.medicine.count({ where: { prescriptions: { some: { prescription: { userId: req.userId } } } } }),
+      prisma.alert.count({ where: { isRead: false, prescription: { userId: req.userId } } }),
+      prisma.doctorRecommendation.count({ where: { status: "PENDING", prescription: { userId: req.userId } } }),
     ]);
     return res.json({ users, prescriptions, medicines, unreadAlerts, pendingRecommendations });
   } catch (error) {

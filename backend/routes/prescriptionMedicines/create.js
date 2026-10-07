@@ -8,7 +8,7 @@ router.post("/", async (req, res) => {
   try {
     const data = readFields(req.body, {"medicineId":"id","dosage":"string?","frequency":"string?","duration":"string?"}, ["medicineId"]);
     data.prescriptionId = positiveInt(req.params.id);
-    if (!await prisma.prescription.findUnique({ where: { id: data.prescriptionId } })) {
+    if (!await prisma.prescription.findUnique({ where: { id: data.prescriptionId, userId: req.userId } })) {
       return res.status(404).json({ message: "prescription not found" });
     }
     if (!await prisma.medicine.findUnique({ where: { id: data.medicineId } })) {

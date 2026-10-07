@@ -3,25 +3,32 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { once } = require("node:events");
+process.env.JWT_SECRET = require("node:crypto").randomBytes(48).toString("hex");
+process.env.JWT_EXPIRES_IN = "1h";
+process.env.CATALOG_EDITOR_IDS = "1";
 const app = require("../server");
+const { signToken } = require("../lib/auth");
 const prisma = require("../lib/prisma");
 
+const originalFindUser = prisma.user.findUnique;
 let server;
 let base;
 before(async () => {
+  prisma.user.findUnique = async () => ({ id: 1 });
   server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
   base = "http://127.0.0.1:" + server.address().port;
 });
 after(async () => {
   await new Promise((resolve) => server.close(resolve));
+  prisma.user.findUnique = originalFindUser;
   await prisma.$disconnect();
 });
 
 async function request(method, url, body, headers = {}) {
   const response = await fetch(base + url, {
     method,
-    headers: { "Content-Type": "application/json", ...headers },
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + signToken(1), ...headers },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   return { status: response.status, body: await response.json() };
@@ -61,8 +68,6 @@ test("required fields, field types, IDs and empty updates return 400 before data
     ["POST", "/api/auth/register", {}],
     ["POST", "/api/auth/register", { name: "A", email: "bad", password: "p" }],
     ["POST", "/api/auth/login", { email: "a@b.com" }],
-    ["GET", "/api/users/me"],
-    ["GET", "/api/users/me", undefined, { "x-user-id": "1.5" }],
     ["POST", "/api/prescriptions", { userId: true, fileName: "a.txt" }],
     ["GET", "/api/prescriptions?userId=nope"],
     ["GET", "/api/prescriptions/not-an-id"],
