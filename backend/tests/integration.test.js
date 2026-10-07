@@ -228,7 +228,7 @@ test("all endpoints against PostgreSQL, including analysis and cascading deletes
     await call("DELETE", "/api/users/me", undefined, 200, userHeaders);
     await call("GET", "/api/users/me", undefined, 401, userHeaders);
     const source = fs.readFileSync(path.join(__dirname, "../server.js"), "utf8");
-    const mounts = [...source.matchAll(/app\.use\("([^"]+)", require\("\.\/routes\/([^"]+)"\)\);/g)];
+    const mounts = [...source.matchAll(/app\.use\(\s*"([^"]+)"\s*,\s*require\("\.\/routes\/([^"]+)"\),?\s*\);/g)];
     for (const [, url, file] of mounts) {
       const route = fs.readFileSync(path.join(__dirname, "../routes", file + ".js"), "utf8");
       const method = route.match(/router\.(get|post|put|patch|delete)\("/)[1].toUpperCase();

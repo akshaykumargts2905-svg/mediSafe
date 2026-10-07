@@ -1,1 +1,18 @@
-"use client";import {useState} from "react";import {useRouter} from "next/navigation";import {api,json} from "../../lib/api";import ApiPanel from "../../components/ApiPanel";export default function Profile(){const router=useRouter();const[name,setName]=useState(""),[error,setError]=useState(""),[saved,setSaved]=useState("");return <ApiPanel title="Your profile" description="Profile data belongs to the user selected by x-user-id." endpoint="/api/users/me">{({data})=>{const u=data?.user;return <><section className="panel"><h2>Account details</h2>{u?<><p><b>{u.name}</b><br/>{u.email}</p><form onSubmit={async e=>{e.preventDefault();setError("");setSaved("");try{await api("/api/users/me",json("PUT",{name}));setSaved("Profile updated.")}catch(x){setError(x.message)}}}><label>Update name<input className="form-control" value={name} onChange={e=>setName(e.target.value)} placeholder={u.name}/></label><button className="button">Save profile</button>{saved&&<p className="feedback success">{saved}</p>}{error&&<p className="feedback error">{error}</p>}</form></>:<p className="empty-state">Sign in to load your profile.</p>}</section><button className="button secondary" onClick={async()=>{if(!confirm("Delete your MediSafe account? This cannot be undone."))return;try{await api("/api/users/me",{method:"DELETE"});localStorage.removeItem("medisafe_user_id");router.push("/")}catch(e){setError(e.message)}}}>Delete account</button></>}}</ApiPanel>}
+"use client";
+import { useRouter } from "next/navigation";
+import ApiPanel from "../../components/ApiPanel";
+import RecordForm from "../../components/RecordForm";
+import { authApi } from "../../lib/services";
+import { clearSession } from "../../lib/api";
+export default function Profile() {
+  const router = useRouter();
+  return <ApiPanel title="Your profile" description="Manage the account you are signed in to." endpoint="/api/users/me">
+    {({ data, refresh, run, busy }) => data?.user && <>
+      <section className="panel"><h2>Account details</h2>
+        <RecordForm key={JSON.stringify(data.user)} initial={data.user} fields={[{ name: "name", label: "Full name", required: true }, { name: "email", label: "Email address", type: "email", required: true }]} onSubmit={async (values) => { await authApi.update(values); await refresh(); }} />
+      </section>
+      <section className="panel"><h2>Change password</h2><RecordForm fields={[{ name: "password", label: "New password", type: "password", minLength: 8, required: true, autoComplete: "new-password", help: "At least 8 characters, at most 72 UTF-8 bytes." }]} onSubmit={async (values) => { await authApi.update(values); clearSession(); router.replace("/login"); }} /></section>
+      <section className="panel"><h2>Delete account</h2><p>This removes your prescriptions and all their associated records.</p><button className="button danger" disabled={busy} onClick={async () => { if (confirm("Permanently delete your account and all prescription records?")) { const result = await run({ method: "DELETE", refresh: false }); if (result) { clearSession(); router.replace("/"); } } }}>Delete account</button></section>
+    </>}
+  </ApiPanel>;
+}

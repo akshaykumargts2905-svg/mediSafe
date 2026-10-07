@@ -278,7 +278,7 @@ backend/
 - Nullable fields accept `null` to clear them. Email addresses are trimmed and lowercased. Empty strings are rejected.
 - A list with no results returns an empty array. Interaction checks with existing medicines/foods and no match return `{ "found": false, "interaction": null }`.
 - There is no file upload endpoint: prescription creation stores `fileName` and optional `fileUrl` metadata.
-- No CORS middleware is configured. These examples work in Postman; a separate browser frontend needs a same-origin proxy or a deliberate CORS configuration.
+- CORS permits the comma-separated origins in FRONTEND_ORIGINS (default http://localhost:3000). The frontend uses a same-origin Next.js proxy by default.
 
 ## All endpoints
 

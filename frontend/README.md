@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MediSafe frontend
 
-## Getting Started
+Next.js App Router UI connected to the existing Express/Prisma API through Axios. The existing workspace design is preserved, with authenticated CRUD screens for the backend's available features.
 
-First, run the development server:
+See [INTEGRATION.md](./INTEGRATION.md) for the full 60-endpoint inventory, before/after audit, changed files, permissions, environment options and verification details.
 
-```bash
+## Run
+
+Start the backend from its directory:
+
+```powershell
+cd backend
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+In a second terminal from the repository root:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```powershell
+cd frontend
+npm install
+# On a fresh checkout:
+Copy-Item .env.example .env.local
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open http://localhost:3000. Register, then log in. The JWT is stored for the current browser tab and attached by the shared Axios client. Expired/rejected sessions return to login.
 
-## Learn More
+## Environment
 
-To learn more about Next.js, take a look at the following resources:
+`MEDISAFE_API_URL=http://localhost:5000` configures the server-side proxy. Leave `NEXT_PUBLIC_API_URL=` empty for same-origin browser requests. Only public origins belong in frontend configuration; keep database credentials and JWT signing secrets in the backend.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Shared catalog editing requires your backend user ID in `CATALOG_EDITOR_IDS`. Accounts without that permission can browse and check interactions. Private records always remain scoped to their owner.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Verify
 
-## Deploy on Vercel
+```powershell
+npm run lint
+npx tsc --noEmit
+npm run build
+npx playwright install chromium
+npm run test:e2e
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The browser test starts isolated servers on ports 3100/5100 and uses the configured development PostgreSQL database. It removes only its own synthetic test records. Existing app processes on 3000/5000 are left running.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+On Windows with Edge installed, use `$env:E2E_BROWSER_CHANNEL='msedge'` before `npm run test:e2e`.
+
+The backend still provides supplied-text OCR storage and an unchanged-text translation placeholder. There is no file-storage, automatic OCR, AI or real translation service to connect.

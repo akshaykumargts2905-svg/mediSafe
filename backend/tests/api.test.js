@@ -36,7 +36,7 @@ async function request(method, url, body, headers = {}) {
 
 test("every route has one handler, try/catch, and one unique method/path", () => {
   const source = fs.readFileSync(path.join(__dirname, "../server.js"), "utf8");
-  const mounts = [...source.matchAll(/app\.use\("([^"]+)", require\("\.\/routes\/([^"]+)"\)\);/g)];
+  const mounts = [...source.matchAll(/app\.use\(\s*"([^"]+)"\s*,\s*require\("\.\/routes\/([^"]+)"\),?\s*\);/g)];
   assert.equal(mounts.length, 60);
   const endpoints = new Set();
   for (const [, url, file] of mounts) {

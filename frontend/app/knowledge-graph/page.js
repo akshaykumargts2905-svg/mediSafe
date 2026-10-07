@@ -1,1 +1,17 @@
-"use client";import ApiPanel from "../../components/ApiPanel";export default function Graph(){return <ApiPanel title="Knowledge graph" description="Medicine and food relationships returned by the backend." endpoint="/api/knowledge-graph">{({data})=>{if(!data)return null;const meds=data.medicines||[],foods=data.foods||[],drug=data.drugInteractions||[],foodLinks=data.foodInteractions||[],names=new Map([...meds,...foods].map(x=>[x.id,x.name]));return <><section className="panel"><h2>Catalog nodes</h2><div className="toolbar">{[...meds,...foods].map(x=><span className="badge" key={`${x.id}-${x.name}`}>{x.name}</span>)}</div></section><section className="panel"><h2>Drug–drug relationships</h2>{drug.length?<div className="list">{drug.map(x=><div className="row-card" key={x.id}><b>{names.get(x.medicineAId)||`Medicine ${x.medicineAId}`} ↔ {names.get(x.medicineBId)||`Medicine ${x.medicineBId}`}</b><span className={`badge ${(x.severity||"").toLowerCase()}`}>{x.severity}</span></div>)}</div>:<p className="empty-state">No drug relationships returned.</p>}</section><section className="panel"><h2>Drug–food relationships</h2>{foodLinks.length?<div className="list">{foodLinks.map(x=><div className="row-card" key={x.id}><b>{names.get(x.medicineId)||`Medicine ${x.medicineId}`} ↔ {names.get(x.foodId)||`Food ${x.foodId}`}</b><span className={`badge ${(x.severity||"").toLowerCase()}`}>{x.severity}</span></div>)}</div>:<p className="empty-state">No food relationships returned.</p>}</section></>}}</ApiPanel>}
+"use client";
+import Link from "next/link";
+import ApiPanel from "../../components/ApiPanel";
+export default function Graph() {
+  return <ApiPanel title="Knowledge graph" description="Explore recorded medicine and food relationships." endpoint="/api/knowledge-graph">
+    {({ data }) => {
+      if (!data) return null;
+      const medicines = new Map(data.medicines.map((item) => [item.id, item.name]));
+      const foods = new Map(data.foods.map((item) => [item.id, item.name]));
+      return <>
+        <section className="panel"><h2>Medicines</h2><div className="toolbar">{data.medicines.map((item) => <Link className="badge" key={item.id} href={"/knowledge-graph/medicine/" + item.id}>{item.name} ↗</Link>)}</div>{!data.medicines.length && <p className="empty-state">No medicines recorded.</p>}</section>
+        <section className="panel"><h2>Drug–drug relationships</h2>{data.drugInteractions.map((item) => <article className="row-card" key={item.id}><div><b>{medicines.get(item.medicineAId)} ↔ {medicines.get(item.medicineBId)}</b><p>{item.description}</p></div><span className={"badge " + item.severity.toLowerCase()}>{item.severity}</span></article>)}{!data.drugInteractions.length && <p className="empty-state">No drug relationships recorded.</p>}</section>
+        <section className="panel"><h2>Drug–food relationships</h2>{data.foodInteractions.map((item) => <article className="row-card" key={item.id}><div><b>{medicines.get(item.medicineId)} ↔ {foods.get(item.foodId)}</b><p>{item.description}</p></div><span className={"badge " + item.severity.toLowerCase()}>{item.severity}</span></article>)}{!data.foodInteractions.length && <p className="empty-state">No food relationships recorded.</p>}</section>
+      </>;
+    }}
+  </ApiPanel>;
+}

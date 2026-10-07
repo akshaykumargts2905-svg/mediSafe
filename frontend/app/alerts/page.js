@@ -1,1 +1,36 @@
-"use client";import ApiPanel from "../../components/ApiPanel";export default function Alerts(){return <ApiPanel title="Safety alerts" description="Alerts returned by your MediSafe backend." endpoint="/api/alerts">{({data,run})=>{const rows=data?.alerts||[];return rows.length?<div className="list">{rows.map(a=><article className="row-card" key={a.id}><span><b>{a.title}</b><p>{a.message}</p><span className={`badge ${(a.severity||"").toLowerCase()}`}>{a.severity||"NOTICE"}</span>{a.language&&<span>　{a.language}</span>}</span><div className="toolbar"><button className="button secondary" onClick={()=>run({path:`/api/alerts/${a.id}/read`,method:"PATCH",success:"Alert marked as read."})}>Mark read</button><button className="button secondary" onClick={()=>run({path:`/api/alerts/${a.id}`,method:"DELETE",success:"Alert deleted."})}>Delete</button></div></article>)}</div>:<p className="empty-state">No alerts were returned.</p>}}</ApiPanel>}
+"use client";
+import { useEffect, useState } from "react";
+import ApiPanel from "../../components/ApiPanel";
+import RecordForm from "../../components/RecordForm";
+import ErrorMessage from "../../components/ErrorMessage";
+import { api, json } from "../../lib/api";
+export default function Alerts() {
+  const [prescriptions, setPrescriptions] = useState([]);
+  const [filter, setFilter] = useState("");
+  const [detail, setDetail] = useState(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    api("/api/prescriptions").then((data) => { if (active) setPrescriptions(data.prescriptions); }).catch((failure) => { if (active) setError(failure.message); });
+    return () => { active = false; };
+  }, []);
+  return <ApiPanel key={filter} title="Safety alerts" description="Review alerts and add notes for your own prescriptions." endpoint={"/api/alerts" + (filter ? "?prescriptionId=" + filter : "")}>
+    {({ data, refresh, run, busy }) => <>
+      <label>Filter by prescription<select className="form-control" value={filter} onChange={(event) => { setFilter(event.target.value); setDetail(null); }}><option value="">All prescriptions</option>{prescriptions.map((prescription) => <option key={prescription.id} value={prescription.id}>{prescription.fileName}</option>)}</select></label>
+      <ErrorMessage message={error} />
+      <details className="panel"><summary>Add an alert</summary><RecordForm fields={[
+        { name: "prescriptionId", label: "Prescription", type: "number", required: true, options: prescriptions.map((item) => ({ value: item.id, label: item.fileName })) },
+        { name: "type", label: "Type", required: true }, { name: "severity", label: "Severity", required: true },
+        { name: "title", label: "Title", required: true }, { name: "message", label: "Message", type: "textarea", required: true },
+        { name: "language", label: "Language code" }, { name: "isRead", label: "Already read", type: "checkbox" },
+      ]} initial={{ type: "MANUAL", severity: "LOW", language: "en" }} onSubmit={async (values) => { await api("/api/alerts", json("POST", values)); await refresh(); }} /></details>
+      {detail && <section className="panel"><h2>{detail.title}</h2><p>{detail.message}</p><p>Prescription #{detail.prescriptionId} · {detail.language} · {detail.isRead ? "Read" : "Unread"}</p><button className="text-button" onClick={() => setDetail(null)}>Close details</button></section>}
+      <div className="list">{(data?.alerts || []).map((alert) => <article className="row-card" key={alert.id}><div><b>{alert.title}</b><p>{alert.message}</p><span className={"badge " + alert.severity.toLowerCase()}>{alert.severity}</span><span> · {alert.isRead ? "Read" : "Unread"}</span></div>
+        <div className="toolbar"><button className="button secondary" disabled={busy} onClick={async () => { setError(""); try { setDetail((await api("/api/alerts/" + alert.id)).alert); } catch (failure) { setError(failure.message); } }}>Details</button>
+          <button className="button secondary" disabled={busy || alert.isRead} onClick={() => run({ path: `/api/alerts/${alert.id}/read`, method: "PATCH", success: "Alert marked read." })}>Mark read</button>
+          <button className="button danger" disabled={busy} onClick={async () => { if (confirm("Delete this alert?")) { const result = await run({ path: "/api/alerts/" + alert.id, method: "DELETE" }); if (result) setDetail(null); } }}>Delete</button>
+        </div></article>)}</div>
+      {!busy && !data?.alerts?.length && <p className="empty-state">No alerts for this view.</p>}
+    </>}
+  </ApiPanel>;
+}

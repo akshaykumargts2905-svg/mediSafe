@@ -1,1 +1,17 @@
-"use client";import {useState} from "react";import {api,json} from "../../lib/api";import ApiPanel from "../../components/ApiPanel";export default function Languages(){const[text,setText]=useState(""),[language,setLanguage]=useState(""),[translation,setTranslation]=useState(null),[error,setError]=useState("");return <ApiPanel title="Languages" description="Choose from languages currently supported by the service." endpoint="/api/languages">{({data})=>{const list=Array.isArray(data)?data:data?.languages||[];return <><section className="panel"><h2>Available languages</h2>{list.map(l=><span className="badge" key={l.code}>{l.name} · {l.code}</span>)}</section><section className="panel"><h2>Translate alert text</h2><form onSubmit={async e=>{e.preventDefault();setError("");try{setTranslation(await api("/api/translate",json("POST",{text,language})))}catch(x){setError(x.message)}}}><textarea className="form-control" rows="3" value={text} onChange={e=>setText(e.target.value)} placeholder="Text to translate" required/><select className="form-control" value={language} onChange={e=>setLanguage(e.target.value)} required><option value="">Select language</option>{list.map(l=><option key={l.code} value={l.code}>{l.name}</option>)}</select><button className="button">Translate</button></form>{translation&&<p className="feedback">{translation.translatedText}</p>}{error&&<p className="feedback error">{error}</p>}</section></>}}</ApiPanel>}
+"use client";
+import { useState } from "react";
+import ApiPanel from "../../components/ApiPanel";
+import RecordForm from "../../components/RecordForm";
+import { api, json } from "../../lib/api";
+export default function Languages() {
+  const [translation, setTranslation] = useState(null);
+  return <ApiPanel title="Languages" description="View available languages and try the translation preview." endpoint="/api/languages">
+    {({ data }) => Array.isArray(data) && <>
+      <section className="panel"><h2>Available languages</h2>{data.map((language) => <span className="badge" key={language.code}>{language.name} · {language.code}</span>)}</section>
+      <section className="panel"><h2>Translation preview</h2><p>Translation is not enabled yet. This preview returns your original text unchanged.</p>
+        <RecordForm submitLabel="Preview translation" fields={[{ name: "text", label: "Text", type: "textarea", required: true }, { name: "language", label: "Language", required: true, options: data.map((language) => ({ value: language.code, label: language.name })) }]} onSubmit={async (values) => { setTranslation(null); setTranslation(await api("/api/translate", json("POST", values))); }} />
+        {translation && <p className="feedback preserve-lines" role="status">{translation.translatedText}{translation.placeholder && <small> — Original text (translation placeholder)</small>}</p>}
+      </section>
+    </>}
+  </ApiPanel>;
+}
