@@ -1,0 +1,1 @@
+"use client";import {Suspense} from "react";import {useParams} from "next/navigation";import ApiPanel from "../../../components/ApiPanel";function Content(){const{id}=useParams();return <ApiPanel title={`Medicine #${id}`} endpoint={`/api/medicines/${id}`}/>}export default function Medicine(){return <Suspense fallback={<p>Loading medicine…</p>}><Content/></Suspense>}
