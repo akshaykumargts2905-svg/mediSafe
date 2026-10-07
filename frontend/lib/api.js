@@ -8,14 +8,25 @@ export function currentUserId() {
 
 export async function api(path, options = {}) {
   const userId = currentUserId();
-  if (path === "/api/prescriptions" && (options.method || "GET") === "GET" && userId) {
+  if (
+    path === "/api/prescriptions" &&
+    (options.method || "GET") === "GET" &&
+    userId
+  ) {
     path = `${path}?userId=${encodeURIComponent(userId)}`;
   }
-  const headers = { ...(options.body && !(options.body instanceof FormData) ? { "Content-Type": "application/json" } : {}), ...options.headers };
+  const headers = {
+    ...(options.body && !(options.body instanceof FormData)
+      ? { "Content-Type": "application/json" }
+      : {}),
+    ...options.headers,
+  };
   if (userId) headers["x-user-id"] = userId;
   const response = await fetch(`${API_URL}${path}`, { ...options, headers });
-  const data = response.status === 204 ? null : await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.message || `Request failed (${response.status})`);
+  const data =
+    response.status === 204 ? null : await response.json().catch(() => ({}));
+  if (!response.ok)
+    throw new Error(data?.message || `Request failed (${response.status})`);
   return data;
 }
 

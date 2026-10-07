@@ -1,1 +1,21 @@
-"use client";import {Suspense} from "react";import {useParams} from "next/navigation";import ApiPanel from "../../../../components/ApiPanel";function Content(){const{id}=useParams();return <ApiPanel title="OCR record" description="The backend stores OCR text supplied by the client; it does not process the uploaded image." endpoint={`/api/ocr/${id}`}/>}export default function Ocr(){return <Suspense fallback={<p>Loading OCR…</p>}><Content/></Suspense>}
+"use client";
+import { Suspense } from "react";
+import { useParams } from "next/navigation";
+import ApiPanel from "../../../../components/ApiPanel";
+function Content() {
+  const { id } = useParams();
+  return (
+    <ApiPanel
+      title="OCR record"
+      description="The backend stores OCR text supplied by the client; it does not process the uploaded image."
+      endpoint={`/api/ocr/${id}`}
+    />
+  );
+}
+export default function Ocr() {
+  return (
+    <Suspense fallback={<p>Loading OCR…</p>}>
+      <Content />
+    </Suspense>
+  );
+}

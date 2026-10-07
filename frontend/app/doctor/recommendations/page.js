@@ -1,1 +1,125 @@
-"use client";import {useState} from "react";import {api,json} from "../../../lib/api";import Workspace from "../../../components/Workspace";export default function Recommendations(){const[id,setId]=useState(""),[medicineId,setMedicineId]=useState(""),[reason,setReason]=useState(""),[alternative,setAlternative]=useState(""),[status,setStatus]=useState(""),[rows,setRows]=useState([]),[error,setError]=useState(""),[notice,setNotice]=useState("");async function load(e){e?.preventDefault();setError("");try{const r=await api(`/api/doctor/recommendations/${id}`);setRows(r.recommendations||[])}catch(x){setError(x.message)}}async function create(e){e.preventDefault();setError("");try{await api("/api/doctor/recommendations",json("POST",{prescriptionId:Number(id),medicineId:Number(medicineId),reason,...(alternative?{alternative}:{}),...(status?{status}:{})}));setNotice("Recommendation submitted.");const r=await api(`/api/doctor/recommendations/${id}`);setRows(r.recommendations||[])}catch(x){setError(x.message)}}return <Workspace title="Doctor recommendations" description="Submit only clinician authored guidance. Required fields follow the doctor API contract."><form className="panel" onSubmit={load}><label>Prescription ID<input className="form-control" inputMode="numeric" value={id} onChange={e=>setId(e.target.value)} required/></label><button className="button secondary">Load recommendations</button></form><form className="panel" onSubmit={create}><div className="form-row"><label>Prescription ID<input className="form-control" inputMode="numeric" value={id} onChange={e=>setId(e.target.value)} required/></label><label>Medicine ID<input className="form-control" inputMode="numeric" value={medicineId} onChange={e=>setMedicineId(e.target.value)} required/></label></div><label>Reason<textarea className="form-control" value={reason} onChange={e=>setReason(e.target.value)} required/></label><label>Alternative (optional)<input className="form-control" value={alternative} onChange={e=>setAlternative(e.target.value)}/></label><label>Status (optional)<input className="form-control" value={status} onChange={e=>setStatus(e.target.value)}/></label><button className="button">Submit recommendation</button></form>{error&&<p className="feedback error">{error}</p>}{notice&&<p className="feedback success">{notice}</p>}{rows.map(r=><article className="panel" key={r.id}><h2>{r.medicine?.name||`Medicine #${r.medicineId}`}</h2><p>{r.reason}</p>{r.alternative&&<p>Alternative: {r.alternative}</p>}<span className="badge">{r.status||"Status not provided"}</span></article>)}</Workspace>}
+"use client";
+import { useState } from "react";
+import { api, json } from "../../../lib/api";
+import Workspace from "../../../components/Workspace";
+export default function Recommendations() {
+  const [id, setId] = useState(""),
+    [medicineId, setMedicineId] = useState(""),
+    [reason, setReason] = useState(""),
+    [alternative, setAlternative] = useState(""),
+    [status, setStatus] = useState(""),
+    [rows, setRows] = useState([]),
+    [error, setError] = useState(""),
+    [notice, setNotice] = useState("");
+  async function load(e) {
+    e?.preventDefault();
+    setError("");
+    try {
+      const r = await api(`/api/doctor/recommendations/${id}`);
+      setRows(r.recommendations || []);
+    } catch (x) {
+      setError(x.message);
+    }
+  }
+  async function create(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      await api(
+        "/api/doctor/recommendations",
+        json("POST", {
+          prescriptionId: Number(id),
+          medicineId: Number(medicineId),
+          reason,
+          ...(alternative ? { alternative } : {}),
+          ...(status ? { status } : {}),
+        }),
+      );
+      setNotice("Recommendation submitted.");
+      const r = await api(`/api/doctor/recommendations/${id}`);
+      setRows(r.recommendations || []);
+    } catch (x) {
+      setError(x.message);
+    }
+  }
+  return (
+    <Workspace
+      title="Doctor recommendations"
+      description="Submit only clinician authored guidance. Required fields follow the doctor API contract."
+    >
+      <form className="panel" onSubmit={load}>
+        <label>
+          Prescription ID
+          <input
+            className="form-control"
+            inputMode="numeric"
+            value={id}
+            onChange={(e) => setId(e.target.value)}
+            required
+          />
+        </label>
+        <button className="button secondary">Load recommendations</button>
+      </form>
+      <form className="panel" onSubmit={create}>
+        <div className="form-row">
+          <label>
+            Prescription ID
+            <input
+              className="form-control"
+              inputMode="numeric"
+              value={id}
+              onChange={(e) => setId(e.target.value)}
+              required
+            />
+          </label>
+          <label>
+            Medicine ID
+            <input
+              className="form-control"
+              inputMode="numeric"
+              value={medicineId}
+              onChange={(e) => setMedicineId(e.target.value)}
+              required
+            />
+          </label>
+        </div>
+        <label>
+          Reason
+          <textarea
+            className="form-control"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            required
+          />
+        </label>
+        <label>
+          Alternative (optional)
+          <input
+            className="form-control"
+            value={alternative}
+            onChange={(e) => setAlternative(e.target.value)}
+          />
+        </label>
+        <label>
+          Status (optional)
+          <input
+            className="form-control"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+          />
+        </label>
+        <button className="button">Submit recommendation</button>
+      </form>
+      {error && <p className="feedback error">{error}</p>}
+      {notice && <p className="feedback success">{notice}</p>}
+      {rows.map((r) => (
+        <article className="panel" key={r.id}>
+          <h2>{r.medicine?.name || `Medicine #${r.medicineId}`}</h2>
+          <p>{r.reason}</p>
+          {r.alternative && <p>Alternative: {r.alternative}</p>}
+          <span className="badge">{r.status || "Status not provided"}</span>
+        </article>
+      ))}
+    </Workspace>
+  );
+}

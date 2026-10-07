@@ -1,1 +1,21 @@
-"use client";import {Suspense} from "react";import {useParams} from "next/navigation";import ApiPanel from "../../../../components/ApiPanel";function Content(){const{id}=useParams();return <ApiPanel title="Prescription medicines" description="Medicines linked to this prescription." endpoint={`/api/prescriptions/${id}/medicines`}/>}export default function Medicines(){return <Suspense fallback={<p>Loading medicines…</p>}><Content/></Suspense>}
+"use client";
+import { Suspense } from "react";
+import { useParams } from "next/navigation";
+import ApiPanel from "../../../../components/ApiPanel";
+function Content() {
+  const { id } = useParams();
+  return (
+    <ApiPanel
+      title="Prescription medicines"
+      description="Medicines linked to this prescription."
+      endpoint={`/api/prescriptions/${id}/medicines`}
+    />
+  );
+}
+export default function Medicines() {
+  return (
+    <Suspense fallback={<p>Loading medicines…</p>}>
+      <Content />
+    </Suspense>
+  );
+}

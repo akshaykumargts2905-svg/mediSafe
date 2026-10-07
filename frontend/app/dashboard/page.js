@@ -1,4 +1,111 @@
 "use client";
 /* eslint-disable react-hooks/set-state-in-effect */
-import Link from "next/link";import {useEffect,useState} from "react";import {api} from "../../lib/api";import Workspace from "../../components/Workspace";
-export default function Dashboard(){const[items,setItems]=useState([]),[alerts,setAlerts]=useState([]),[name,setName]=useState("there"),[error,setError]=useState("");useEffect(()=>{setName(localStorage.getItem("medisafe_user_name")||"there");Promise.all([api("/api/prescriptions"),api("/api/alerts")]).then(([p,a])=>{setItems(p.prescriptions||[]);setAlerts(a.alerts||[])}).catch(e=>setError(e.message))},[]);return <Workspace title={`Good to see you, ${name}`} description="Your medication safety overview.">{error&&<p className="feedback error">{error}</p>}<div className="stat-grid"><div className="stat"><span>Prescriptions</span><b>{items.length}</b><span>on file</span></div><div className="stat"><span>Alerts</span><b>{alerts.length}</b><span>from your records</span></div><div className="stat"><span>Safety checks</span><b>↗</b><span>review interactions</span></div><div className="stat"><span>Care team</span><b>＋</b><span>share a report</span></div></div><section className="panel"><h2>Continue with a safety check</h2><div className="toolbar"><Link className="button" href="/prescriptions/upload">Upload prescription　→</Link><Link className="button secondary" href="/interactions/drug-drug">Check medicines</Link><Link className="button secondary" href="/interactions/drug-food">Check food interactions</Link></div></section><section className="panel"><h2>Recent prescriptions</h2>{!items.length?<p className="empty-state">Your prescriptions will appear here after you add one.</p>:<div className="list">{items.slice(0,5).map(p=><Link className="row-card" href={`/prescriptions/${p.id}`} key={p.id}><span><b>{p.fileName}</b><p>{p.createdAt?new Date(p.createdAt).toLocaleDateString():`Prescription #${p.id}`}</p></span><span className="badge">{p.status||"RECEIVED"}</span></Link>)}</div>}</section><section className="panel"><h2>Recent alerts</h2>{!alerts.length?<p className="empty-state">No alerts were returned by the backend.</p>:<div className="list">{alerts.slice(0,4).map(a=><div className="row-card" key={a.id}><span><b>{a.title}</b><p>{a.message}</p></span><span className="badge high">{a.severity}</span></div>)}</div>}</section></Workspace>}
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { api } from "../../lib/api";
+import Workspace from "../../components/Workspace";
+export default function Dashboard() {
+  const [items, setItems] = useState([]),
+    [alerts, setAlerts] = useState([]),
+    [name, setName] = useState("there"),
+    [error, setError] = useState("");
+  useEffect(() => {
+    setName(localStorage.getItem("medisafe_user_name") || "there");
+    Promise.all([api("/api/prescriptions"), api("/api/alerts")])
+      .then(([p, a]) => {
+        setItems(p.prescriptions || []);
+        setAlerts(a.alerts || []);
+      })
+      .catch((e) => setError(e.message));
+  }, []);
+  return (
+    <Workspace
+      title={`Good to see you, ${name}`}
+      description="Your medication safety overview."
+    >
+      {error && <p className="feedback error">{error}</p>}
+      <div className="stat-grid">
+        <div className="stat">
+          <span>Prescriptions</span>
+          <b>{items.length}</b>
+          <span>on file</span>
+        </div>
+        <div className="stat">
+          <span>Alerts</span>
+          <b>{alerts.length}</b>
+          <span>from your records</span>
+        </div>
+        <div className="stat">
+          <span>Safety checks</span>
+          <b>↗</b>
+          <span>review interactions</span>
+        </div>
+        <div className="stat">
+          <span>Care team</span>
+          <b>＋</b>
+          <span>share a report</span>
+        </div>
+      </div>
+      <section className="panel">
+        <h2>Continue with a safety check</h2>
+        <div className="toolbar">
+          <Link className="button" href="/prescriptions/upload">
+            Upload prescription　→
+          </Link>
+          <Link className="button secondary" href="/interactions/drug-drug">
+            Check medicines
+          </Link>
+          <Link className="button secondary" href="/interactions/drug-food">
+            Check food interactions
+          </Link>
+        </div>
+      </section>
+      <section className="panel">
+        <h2>Recent prescriptions</h2>
+        {!items.length ? (
+          <p className="empty-state">
+            Your prescriptions will appear here after you add one.
+          </p>
+        ) : (
+          <div className="list">
+            {items.slice(0, 5).map((p) => (
+              <Link
+                className="row-card"
+                href={`/prescriptions/${p.id}`}
+                key={p.id}
+              >
+                <span>
+                  <b>{p.fileName}</b>
+                  <p>
+                    {p.createdAt
+                      ? new Date(p.createdAt).toLocaleDateString()
+                      : `Prescription #${p.id}`}
+                  </p>
+                </span>
+                <span className="badge">{p.status || "RECEIVED"}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+      <section className="panel">
+        <h2>Recent alerts</h2>
+        {!alerts.length ? (
+          <p className="empty-state">No alerts were returned by the backend.</p>
+        ) : (
+          <div className="list">
+            {alerts.slice(0, 4).map((a) => (
+              <div className="row-card" key={a.id}>
+                <span>
+                  <b>{a.title}</b>
+                  <p>{a.message}</p>
+                </span>
+                <span className="badge high">{a.severity}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </Workspace>
+  );
+}

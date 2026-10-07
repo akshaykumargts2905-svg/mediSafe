@@ -1,1 +1,86 @@
-"use client";import {useState} from "react";import {useRouter} from "next/navigation";import {api,json} from "../../lib/api";import ApiPanel from "../../components/ApiPanel";export default function Profile(){const router=useRouter();const[name,setName]=useState(""),[error,setError]=useState(""),[saved,setSaved]=useState("");return <ApiPanel title="Your profile" description="Profile data belongs to the user selected by x-user-id." endpoint="/api/users/me">{({data})=>{const u=data?.user;return <><section className="panel"><h2>Account details</h2>{u?<><p><b>{u.name}</b><br/>{u.email}</p><form onSubmit={async e=>{e.preventDefault();setError("");setSaved("");try{await api("/api/users/me",json("PUT",{name}));setSaved("Profile updated.")}catch(x){setError(x.message)}}}><label>Update name<input className="form-control" value={name} onChange={e=>setName(e.target.value)} placeholder={u.name}/></label><button className="button">Save profile</button>{saved&&<p className="feedback success">{saved}</p>}{error&&<p className="feedback error">{error}</p>}</form></>:<p className="empty-state">Sign in to load your profile.</p>}</section><button className="button secondary" onClick={async()=>{if(!confirm("Delete your MediSafe account? This cannot be undone."))return;try{await api("/api/users/me",{method:"DELETE"});localStorage.removeItem("medisafe_user_id");router.push("/")}catch(e){setError(e.message)}}}>Delete account</button></>}}</ApiPanel>}
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { api, json } from "../../lib/api";
+import ApiPanel from "../../components/ApiPanel";
+export default function Profile() {
+  const router = useRouter();
+  const [name, setName] = useState(""),
+    [error, setError] = useState(""),
+    [saved, setSaved] = useState("");
+  return (
+    <ApiPanel
+      title="Your profile"
+      description="Profile data belongs to the user selected by x-user-id."
+      endpoint="/api/users/me"
+    >
+      {({ data }) => {
+        const u = data?.user;
+        return (
+          <>
+            <section className="panel">
+              <h2>Account details</h2>
+              {u ? (
+                <>
+                  <p>
+                    <b>{u.name}</b>
+                    <br />
+                    {u.email}
+                  </p>
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      setError("");
+                      setSaved("");
+                      try {
+                        await api("/api/users/me", json("PUT", { name }));
+                        setSaved("Profile updated.");
+                      } catch (x) {
+                        setError(x.message);
+                      }
+                    }}
+                  >
+                    <label>
+                      Update name
+                      <input
+                        className="form-control"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder={u.name}
+                      />
+                    </label>
+                    <button className="button">Save profile</button>
+                    {saved && <p className="feedback success">{saved}</p>}
+                    {error && <p className="feedback error">{error}</p>}
+                  </form>
+                </>
+              ) : (
+                <p className="empty-state">Sign in to load your profile.</p>
+              )}
+            </section>
+            <button
+              className="button secondary"
+              onClick={async () => {
+                if (
+                  !confirm(
+                    "Delete your MediSafe account? This cannot be undone.",
+                  )
+                )
+                  return;
+                try {
+                  await api("/api/users/me", { method: "DELETE" });
+                  localStorage.removeItem("medisafe_user_id");
+                  router.push("/");
+                } catch (e) {
+                  setError(e.message);
+                }
+              }}
+            >
+              Delete account
+            </button>
+          </>
+        );
+      }}
+    </ApiPanel>
+  );
+}
