@@ -5,11 +5,205 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// =========================
+// USER
+// =========================
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String?
+  createdAt DateTime @default(now())
+
+  prescriptions Prescription[]
+}
+
+// =========================
+// PRESCRIPTION
+// =========================
+
+model Prescription {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  fileName  String
+  fileUrl   String?
+  ocrText   String?
+  createdAt DateTime @default(now())
+
+  user            User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medicines       PrescriptionMedicine[]
+  reports         SafetyReport[]
+  alerts          Alert[]
+  ocrResult       OCRResult?
+  recommendations DoctorRecommendation[]
+}
+
+// =========================
+// OCR RESULT
+// =========================
+
+model OCRResult {
+  id             Int      @id @default(autoincrement())
+  prescriptionId Int      @unique
+  extractedText  String
+  confidence     Float?
+  language       String?
+  status         String   @default("PENDING")
+  createdAt      DateTime @default(now())
+
+  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+}
+
+// =========================
+// MEDICINE
+// =========================
+
+model Medicine {
+  id          Int      @id @default(autoincrement())
+  name        String
+  genericName String?
+  brandName   String?
+  rxCui       String?  @unique
+  atcCode     String?
+  createdAt   DateTime @default(now())
+
+  prescriptions PrescriptionMedicine[]
+
+  interactionsAsA DrugDrugInteraction[] @relation("MedicineA")
+  interactionsAsB DrugDrugInteraction[] @relation("MedicineB")
+
+  foodInteractions DrugFoodInteraction[]
+
+  recommendations DoctorRecommendation[]
+}
+
+// =========================
+// PRESCRIPTION ↔ MEDICINE
+// =========================
+
+model PrescriptionMedicine {
+  id             Int     @id @default(autoincrement())
+  prescriptionId Int
+  medicineId     Int
+  dosage         String?
+  frequency      String?
+  duration       String?
+
+  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+
+  medicine Medicine @relation(fields: [medicineId], references: [id])
+
+  @@unique([prescriptionId, medicineId])
+}
+
+// =========================
+// DRUG ↔ DRUG INTERACTION
+// =========================
+
+model DrugDrugInteraction {
+  id             Int     @id @default(autoincrement())
+  medicineAId    Int
+  medicineBId    Int
+  severity       String
+  description    String
+  recommendation String?
+
+  medicineA Medicine @relation("MedicineA", fields: [medicineAId], references: [id], onDelete: Cascade)
+
+  medicineB Medicine @relation("MedicineB", fields: [medicineBId], references: [id], onDelete: Cascade)
+
+  @@unique([medicineAId, medicineBId])
+}
+
+// =========================
+// FOOD
+// =========================
+
+model Food {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  interactions DrugFoodInteraction[]
+}
+
+// =========================
+// DRUG ↔ FOOD INTERACTION
+// =========================
+
+model DrugFoodInteraction {
+  id             Int     @id @default(autoincrement())
+  medicineId     Int
+  foodId         Int
+  severity       String
+  description    String
+  recommendation String?
+
+  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+
+  food Food @relation(fields: [foodId], references: [id], onDelete: Cascade)
+
+  @@unique([medicineId, foodId])
+}
+
+// =========================
+// SAFETY REPORT
+// =========================
+
+model SafetyReport {
+  id             Int      @id @default(autoincrement())
+  prescriptionId Int
+  overallStatus  String
+  totalMedicines Int      @default(0)
+  totalAlerts    Int      @default(0)
+  highRiskCount  Int      @default(0)
+  summary        String?
+  createdAt      DateTime @default(now())
+
+  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+}
+
+// =========================
+// ALERT
+// =========================
+
+model Alert {
+  id             Int      @id @default(autoincrement())
+  prescriptionId Int
+  type           String
+  severity       String
+  title          String
+  message        String
+  language       String   @default("en")
+  isRead         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+}
+
+// =========================
+// DOCTOR RECOMMENDATION
+// =========================
+
+model DoctorRecommendation {
+  id             Int      @id @default(autoincrement())
+  prescriptionId Int
+  medicineId     Int
+  alternative    String?
+  reason         String
+  status         String   @default("PENDING")
+  createdAt      DateTime @default(now())
+
+  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+
+  medicine Medicine @relation(fields: [medicineId], references: [id])
 }
