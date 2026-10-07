@@ -1,1 +1,4 @@
-import InteractionCheck from "../../../components/InteractionCheck";export default function Page(){return <InteractionCheck/>}
+import InteractionCheck from "../../../components/InteractionCheck";
+export default function Page() {
+  return <InteractionCheck />;
+}
