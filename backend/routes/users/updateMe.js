@@ -8,7 +8,7 @@ const { hashPassword } = require("../../lib/passwords");
 router.put("/", async (req, res) => {
   try {
     const id = req.userId;
-    const data = readFields(req.body, { name: "string", email: "email", password: "password" });
+    const data = readFields(req.body, { name: "string", email: "email", password: "password", language: "language" });
     requireChanges(data);
     if (data.password !== undefined) data.password = await hashPassword(data.password);
     const user = await prisma.user.update({ where: { id }, data, select: userFields });

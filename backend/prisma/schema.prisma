@@ -8,6 +8,18 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  PATIENT
+  DOCTOR
+}
+
+enum InteractionSeverity {
+  LOW
+  MODERATE
+  HIGH
+  CRITICAL
+}
+
 // =========================
 // USER
 // =========================
@@ -18,8 +30,22 @@ model User {
   email     String   @unique
   password  String?
   createdAt DateTime @default(now())
+  role      UserRole @default(PATIENT)
+  language  String   @default("en")
 
   prescriptions Prescription[]
+  doctors       CareAccess[] @relation("PatientAccess")
+  patients      CareAccess[] @relation("DoctorAccess")
+}
+
+model CareAccess {
+  patientId Int
+  doctorId  Int
+  createdAt DateTime @default(now())
+  patient User @relation("PatientAccess", fields: [patientId], references: [id], onDelete: Cascade)
+  doctor User @relation("DoctorAccess", fields: [doctorId], references: [id], onDelete: Cascade)
+  @@id([patientId, doctorId])
+  @@index([doctorId])
 }
 
 // =========================
@@ -40,6 +66,15 @@ model Prescription {
   alerts          Alert[]
   ocrResult       OCRResult?
   recommendations DoctorRecommendation[]
+  image           PrescriptionImage?
+}
+
+// Kept out of regular prescription responses. Only the authorized image endpoint reads bytes.
+model PrescriptionImage {
+  prescriptionId Int @id
+  bytes          Bytes
+  mimeType       String
+  prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
 }
 
 // =========================
@@ -54,6 +89,10 @@ model OCRResult {
   language       String?
   status         String   @default("PENDING")
   createdAt      DateTime @default(now())
+  candidates     Json?
+  inputMethod    String @default("MANUAL")
+  reviewVersion  Int @default(1)
+  confirmedAt    DateTime?
 
   prescription Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
 }
@@ -69,6 +108,9 @@ model Medicine {
   brandName   String?
   rxCui       String?  @unique
   atcCode     String?
+  strength    String?
+  dosageForm  String?
+  aliases     String[] @default([])
   createdAt   DateTime @default(now())
 
   prescriptions PrescriptionMedicine[]
@@ -79,6 +121,20 @@ model Medicine {
   foodInteractions DrugFoodInteraction[]
 
   recommendations DoctorRecommendation[]
+  alternatives    AlternativeMedicine[] @relation("OriginalMedicine")
+  alternativeFor  AlternativeMedicine[] @relation("AlternativeMedicine")
+}
+
+model AlternativeMedicine {
+  id                    Int @id @default(autoincrement())
+  medicineId            Int
+  alternativeMedicineId Int
+  reason                String
+  reasonHi              String?
+  sourceUrl             String
+  medicine Medicine @relation("OriginalMedicine", fields: [medicineId], references: [id], onDelete: Cascade)
+  alternativeMedicine Medicine @relation("AlternativeMedicine", fields: [alternativeMedicineId], references: [id], onDelete: Cascade)
+  @@unique([medicineId, alternativeMedicineId])
 }
 
 // =========================
@@ -108,9 +164,14 @@ model DrugDrugInteraction {
   id             Int     @id @default(autoincrement())
   medicineAId    Int
   medicineBId    Int
-  severity       String
+  severity       InteractionSeverity
   description    String
   recommendation String?
+  risk           String?
+  descriptionHi  String?
+  recommendationHi String?
+  riskHi         String?
+  sourceUrl      String?
 
   medicineA Medicine @relation("MedicineA", fields: [medicineAId], references: [id], onDelete: Cascade)
 
@@ -126,6 +187,7 @@ model DrugDrugInteraction {
 model Food {
   id        Int      @id @default(autoincrement())
   name      String   @unique
+  nameHi    String?
   createdAt DateTime @default(now())
 
   interactions DrugFoodInteraction[]
@@ -139,9 +201,14 @@ model DrugFoodInteraction {
   id             Int     @id @default(autoincrement())
   medicineId     Int
   foodId         Int
-  severity       String
+  severity       InteractionSeverity
   description    String
   recommendation String?
+  risk           String?
+  descriptionHi  String?
+  recommendationHi String?
+  riskHi         String?
+  sourceUrl      String?
 
   medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
 
@@ -175,9 +242,15 @@ model Alert {
   id             Int      @id @default(autoincrement())
   prescriptionId Int
   type           String
-  severity       String
+  severity       InteractionSeverity
   title          String
   message        String
+  messageHi      String?
+  risk           String?
+  riskHi         String?
+  recommendation String?
+  recommendationHi String?
+  sourceUrl      String?
   language       String   @default("en")
   isRead         Boolean  @default(false)
   createdAt      DateTime @default(now())
@@ -195,6 +268,8 @@ model DoctorRecommendation {
   medicineId     Int
   alternative    String?
   reason         String
+  reasonHi       String?
+  alternativeHi  String?
   status         String   @default("PENDING")
   createdAt      DateTime @default(now())
 

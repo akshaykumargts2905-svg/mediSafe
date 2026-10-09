@@ -1,1 +1,9 @@
-"use client";import ApiPanel from "../../../components/ApiPanel";export default function DoctorAlerts(){return <ApiPanel title="Prescription safety alerts" description="Review alerts linked to your prescriptions." endpoint="/api/doctor/alerts">{({data})=>{const rows=data?.alerts||[];return rows.length?<div className="list">{rows.map(a=><article className="row-card" key={a.id}><span><b>{a.title}</b><p>{a.message}</p><p>Record: {a.prescription?.fileName||`Prescription #${a.prescriptionId}`}</p></span><span className={`badge ${(a.severity||"").toLowerCase()}`}>{a.severity||"NOTICE"}</span></article>)}</div>:<p className="empty-state">No alerts returned.</p>}}</ApiPanel>}
+"use client";
+import Link from "next/link";
+import ApiPanel from "../../../components/ApiPanel";
+import ClinicalResult from "../../../components/ClinicalResult";
+export default function DoctorAlerts() {
+  return <ApiPanel title="Prescription safety alerts" description="Alerts for patients who have granted you access." endpoint="/api/doctor/alerts">
+    {({data,busy}) => <>{(data?.alerts || []).map((alert) => <div key={alert.id}><Link href={"/doctor/prescriptions/"+alert.prescriptionId}>{alert.prescription?.fileName || "Prescription #"+alert.prescriptionId}</Link><ClinicalResult record={alert} /></div>)}{!busy && !data?.alerts?.length && <p className="empty-state">No alerts returned.</p>}</>}
+  </ApiPanel>;
+}

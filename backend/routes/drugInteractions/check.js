@@ -3,6 +3,8 @@ const router = express.Router({ mergeParams: true });
 const prisma = require("../../lib/prisma");
 const { readFields, badRequest } = require("../../lib/validation");
 const sendError = require("../../lib/errors");
+const { drugInclude } = require("../../lib/interactions");
+const { guidance, noMatch } = require("../../lib/localization");
 
 router.post("/", async (req, res) => {
   try {
@@ -21,9 +23,9 @@ router.post("/", async (req, res) => {
         { medicineAId: data.medicineAId, medicineBId: data.medicineBId },
         { medicineAId: data.medicineBId, medicineBId: data.medicineAId },
       ] },
-      include: { medicineA: true, medicineB: true },
+      include: drugInclude,
     });
-    return res.json({ found: Boolean(interaction), interaction });
+    return res.json({ found: Boolean(interaction), interaction, guidance: guidance[req.language], notice: interaction ? null : noMatch[req.language] });
   } catch (error) {
     return sendError(res, error);
   }

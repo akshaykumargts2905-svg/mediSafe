@@ -7,7 +7,7 @@ const sendError = require("../../lib/errors");
 router.put("/", async (req, res) => {
   try {
     const id = positiveInt(req.params.id);
-    const data = readFields(req.body, {"medicineId":"id","foodId":"id","severity":"string","description":"string","recommendation":"string?"});
+    const data = readFields(req.body, {"medicineId":"id","foodId":"id","severity":"severity","description":"string","recommendation":"string?","risk":"string?","descriptionHi":"string?","recommendationHi":"string?","riskHi":"string?","sourceUrl":"url?"});
     requireChanges(data);
     if (data.medicineId !== undefined) {
       if (!await prisma.medicine.findUnique({ where: { id: data.medicineId } })) {

@@ -7,10 +7,10 @@ const app = require("../server");
 const prisma = require("../lib/prisma");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const { signToken } = require("../lib/auth");
+const sharp = require("sharp");
 
 // Run explicitly: this suite creates temporary records in DATABASE_URL and removes them.
-test("all endpoints against PostgreSQL, including analysis and cascading deletes", { timeout: 480000 }, async () => {
+test("all endpoints against PostgreSQL, including analysis and cascading deletes", { timeout: 900000 }, async () => {
   const server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
   const base = "http://127.0.0.1:" + server.address().port;
@@ -55,7 +55,7 @@ test("all endpoints against PostgreSQL, including analysis and cascading deletes
     assert.equal((await prisma.user.findUnique({ where: { id: userId } })).password, hashBeforeLogin);
     process.env.CATALOG_EDITOR_IDS = String(userId);
     await call("GET", "/api/languages");
-    await call("POST", "/api/translate", { text: "Hello", language: "hi" });
+    await call("POST", "/api/translate", { text: "Hello", language: "en", source: "en" });
     await call("POST", "/api/auth/login", { ...credentials, password: "wrong" }, 401);
     const userHeaders = { "x-user-id": "2147483647" }; // Spoofed legacy header must be ignored.
     assert.equal((await call("GET", "/api/users/me", undefined, 200, userHeaders)).user.id, userId);
@@ -120,6 +120,9 @@ test("all endpoints against PostgreSQL, including analysis and cascading deletes
     await call("GET", "/api/alerts?prescriptionId=" + pid);
     await call("GET", "/api/alerts/" + alert.id);
     assert.equal((await call("PATCH", "/api/alerts/" + alert.id + "/read")).alert.isRead, true);
+    await call("POST", "/api/analyze/" + pid, {}, 422);
+    const review = (await call("GET", "/api/ocr/" + pid)).ocrResult;
+    await call("POST", "/api/ocr/" + pid + "/confirm", { medicineIds, reviewVersion: review.reviewVersion });
     const first = await call("POST", "/api/analyze/" + pid, { foodIds: [food.id] });
     assert.equal(first.report.totalMedicines, 2);
     assert.equal(first.report.totalAlerts, 3);
@@ -138,6 +141,8 @@ test("all endpoints against PostgreSQL, including analysis and cascading deletes
     assert.equal((await call("GET", "/api/safety-reports/" + pid)).report.totalAlerts, 3);
     assert.equal((await call("GET", "/api/safety-reports?prescriptionId=" + pid)).reports.length, 1);
 
+    await call("GET", "/api/doctor/dashboard", undefined, 403);
+    await prisma.user.update({ where: { id: userId }, data: { role: "DOCTOR" } });
     await call("GET", "/api/doctor/dashboard");
     await call("GET", "/api/doctor/prescriptions?userId=" + userId);
     await call("GET", "/api/doctor/prescriptions/" + pid);
@@ -152,6 +157,7 @@ test("all endpoints against PostgreSQL, including analysis and cascading deletes
       name: tag + "-other", email: tag + "-other@example.com", password: "other-password",
     }, 201);
     otherUserId = otherUser.id;
+    await prisma.user.update({ where: { id: otherUserId }, data: { role: "DOCTOR" } });
     const otherToken = (await call("POST", "/api/auth/login", {
       email: otherUser.email, password: "other-password",
     })).token;
@@ -184,7 +190,7 @@ test("all endpoints against PostgreSQL, including analysis and cascading deletes
     await call("POST", "/api/prescriptions", { userId, fileName: "tamper.txt" }, 403, otherHeaders);
     for (const url of ["/api/prescriptions", "/api/doctor/prescriptions"]) {
       assert.equal((await call("GET", url, undefined, 200, otherHeaders)).prescriptions.length, 0);
-      await call("GET", url + "?userId=" + userId, undefined, 403, otherHeaders);
+      await call("GET", url + "?userId=" + userId, undefined, url.startsWith("/api/doctor") ? 200 : 403, otherHeaders);
     }
     for (const url of ["/api/alerts", "/api/doctor/alerts", "/api/safety-reports"]) {
       const data = await call("GET", url + "?prescriptionId=" + pid, undefined, 200, otherHeaders);
@@ -210,6 +216,66 @@ test("all endpoints against PostgreSQL, including analysis and cascading deletes
     await call("GET", "/api/knowledge-graph");
     assert.equal((await call("GET", "/api/knowledge-graph/medicine/" + a)).medicine.foodInteractions.length, 1);
     assert.equal((await call("GET", "/api/knowledge-graph/medicine/" + b)).medicine.interactionsAsB.length, 1);
+
+
+    // Real image OCR, catalog normalization, review and consent boundaries.
+    const image = await sharp(Buffer.from('<svg width="1200" height="500" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="white"/><g font-family="Arial" font-size="54" fill="black"><text x="60" y="100">SYNTHETIC OCR TEST</text><text x="60" y="230">Aspirin 100 mg</text><text x="60" y="350">Ibuprofen 200 mg</text></g></svg>')).png().toBuffer();
+    async function uploadImage(bytes, type, status) {
+      const body = new FormData(); body.set("image", new Blob([bytes], { type }), "test.png"); body.set("language", "en");
+      const response = await fetch(base + "/api/prescriptions/upload", { method: "POST", headers: { Authorization: "Bearer " + token }, body });
+      const data = await response.json();
+      assert.equal(response.status, status, JSON.stringify(data));
+      seen.add("POST /api/prescriptions/upload"); return data;
+    }
+    await uploadImage(Buffer.from("not an image"), "image/png", 422);
+    await uploadImage(image, "application/pdf", 415);
+    await uploadImage(Buffer.alloc(5 * 1024 * 1024 + 1), "image/png", 413);
+    const uploaded = (await uploadImage(image, "image/png", 201)).prescription;
+    const imageId = uploaded.id;
+    assert.equal(uploaded.ocrResult.inputMethod, "IMAGE");
+    assert.ok(uploaded.ocrResult.confidence > .5);
+    assert.equal(uploaded.ocrResult.status, "REVIEW_REQUIRED");
+    const detected = uploaded.ocrResult.candidates.matches;
+    assert.ok(detected.some(row => row.rxCui === "1191"), "Aspirin must match RxNorm");
+    assert.ok(detected.some(row => row.rxCui === "5640"), "Ibuprofen must match RxNorm");
+    assert.equal((await call("GET", "/api/prescriptions/" + imageId + "/medicines")).medicines.length, 0);
+    await call("POST", "/api/analyze/" + imageId, {}, 422);
+    const imageResponse = await fetch(base + "/api/prescriptions/" + imageId + "/image", { headers: { Authorization: "Bearer " + token } });
+    assert.equal(imageResponse.status, 200); assert.equal(imageResponse.headers.get("content-type"), "image/png"); assert.ok((await imageResponse.arrayBuffer()).byteLength > 0);
+    seen.add("GET /api/prescriptions/" + imageId + "/image");
+    await call("GET", "/api/prescriptions/" + imageId + "/image", undefined, 404, otherHeaders);
+    const selected = detected.filter(row => ["1191","5640"].includes(row.rxCui)).map(row => row.medicineId);
+    await call("POST", "/api/ocr/" + imageId + "/confirm", {medicineIds:selected,reviewVersion:999}, 409);
+    await call("POST", "/api/ocr/" + imageId + "/confirm", {medicineIds:selected,reviewVersion:1}, 404, otherHeaders);
+    await call("POST", "/api/ocr/" + imageId + "/confirm", {medicineIds:selected,reviewVersion:1});
+    const analyzed = await call("POST", "/api/analyze/" + imageId, {}, 200, {"Accept-Language":"hi"});
+    assert.equal(analyzed.report.highRiskCount, 1);
+    assert.match(analyzed.alerts[0].display.message, /[\u0900-\u097F]/);
+    assert.ok(analyzed.alternatives.length > 0);
+    const english = analyzed.alerts[0].message;
+    const hindi = await call("POST", "/api/translate", {text:english,source:"en",language:"hi"});
+    assert.equal(hindi.translatedText, analyzed.alerts[0].messageHi);
+    await call("POST", "/api/translate", {text:"unconfigured provider test " + tag,source:"en",language:"hi"}, 503);
+    await call("PUT", "/api/users/me", {language:"hi",role:"PATIENT"});
+    assert.equal((await call("GET", "/api/users/me")).user.role, "DOCTOR", "Profile must not change role");
+    assert.equal((await call("GET", "/api/users/me")).user.language, "hi");
+    await call("PUT", "/api/users/me", {language:"en"});
+    assert.equal((await call("GET", "/api/care-team")).doctors.length, 0);
+    await call("POST", "/api/care-team", {email:otherUser.email}, 201);
+    assert.equal((await call("GET", "/api/care-team")).doctors[0].doctorId, otherUserId);
+    assert.equal((await call("GET", "/api/doctor/prescriptions/" + imageId, undefined, 200, otherHeaders)).prescription.user.id, userId);
+    await call("GET", "/api/prescriptions/" + imageId, undefined, 404, otherHeaders);
+    await call("DELETE", "/api/care-team/" + otherUserId);
+    await call("GET", "/api/doctor/prescriptions/" + imageId, undefined, 404, otherHeaders);
+    await call("PUT", "/api/ocr/" + imageId, {extractedText:"Aspirin 100 mg",language:"en"});
+    assert.equal((await call("GET", "/api/ocr/" + imageId)).ocrResult.inputMethod,"IMAGE");
+    assert.equal((await call("GET", "/api/alerts?prescriptionId=" + imageId)).alerts.length,0);
+    await call("GET", "/api/safety-reports/" + imageId, undefined, 404);
+    await call("POST", "/api/analyze/" + imageId, {}, 422);
+    await call("POST", "/api/safety-reports/generate/" + imageId, {}, 422);
+    await call("DELETE", "/api/prescriptions/" + imageId);
+    assert.equal(await prisma.prescriptionImage.count({where:{prescriptionId:imageId}}),0);
+    console.log("Real image OCR, Hindi, review, private images and revocable doctor consent passed.");
 
     await call("DELETE", "/api/alerts/" + alert.id);
     await call("GET", "/api/alerts/" + alert.id, undefined, 404);

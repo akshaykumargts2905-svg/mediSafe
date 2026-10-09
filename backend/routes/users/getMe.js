@@ -9,7 +9,7 @@ router.get("/", async (req, res) => {
     const id = req.userId;
     const user = await prisma.user.findUnique({ where: { id }, select: userFields });
     if (!user) return res.status(404).json({ message: "User not found" });
-    return res.json({ user, permissions: { catalogEditor: canEditCatalog(user.id) } });
+    return res.json({ user, permissions: { catalogEditor: canEditCatalog(user.id), doctor: user.role === "DOCTOR" } });
   } catch (error) {
     return sendError(res, error);
   }

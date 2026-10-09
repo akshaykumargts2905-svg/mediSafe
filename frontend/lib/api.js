@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getLanguage } from "./language";
 
 const TOKEN_KEY = "medisafe_token";
 export function getToken() {
@@ -10,6 +11,10 @@ export function subscribeSession(callback) {
   return () => window.removeEventListener("medisafe-session", callback);
 }
 export function saveSession(token) {
+  if (typeof token !== "string" || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token)) {
+    clearSession();
+    throw new Error("Login did not return a valid session token. Check that the updated backend is running and try again.");
+  }
   window.sessionStorage.setItem(TOKEN_KEY, token);
   // Retire the old user-ID-only login.
   window.localStorage.removeItem("medisafe_user_id");
@@ -38,6 +43,7 @@ export const client = axios.create({
   headers: { Accept: "application/json" },
 });
 client.interceptors.request.use((config) => {
+  config.headers["Accept-Language"] = getLanguage();
   const publicRequest = /^\/api\/auth\/(login|register)$/.test(config.url || "") || config.url === "/api-health";
   if (!publicRequest) {
     const token = getToken();

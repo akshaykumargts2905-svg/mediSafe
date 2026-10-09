@@ -1,49 +1,49 @@
 # MediSafe frontend
 
-Next.js App Router UI connected to the existing Express/Prisma API through Axios. The existing workspace design is preserved, with authenticated CRUD screens for the backend's available features.
-
-See [INTEGRATION.md](./INTEGRATION.md) for the full 60-endpoint inventory, before/after audit, changed files, permissions, environment options and verification details.
-
-## Run
-
-Start the backend from its directory:
+The existing Next.js App Router workspace is connected to Express/PostgreSQL through the shared
+Axios client. See the root [setup guide](../README.md), [verification](../VERIFICATION.md) and
+[endpoint inventory](INTEGRATION.md).
 
 ```powershell
-cd backend
-npm install
-npm run dev
-```
-
-In a second terminal from the repository root:
-
-```powershell
-cd frontend
-npm install
-# On a fresh checkout:
+npm ci
 Copy-Item .env.example .env.local
 npm run dev
 ```
 
-Open http://localhost:3000. Register, then log in. The JWT is stored for the current browser tab and attached by the shared Axios client. Expired/rejected sessions return to login.
+Use `MEDISAFE_API_URL=http://localhost:5000` for the server-side proxy and leave
+`NEXT_PUBLIC_API_URL=` empty. Database/JWT/provider secrets must never be placed here.
 
-## Environment
+Login stores a validated JWT in sessionStorage. Requests attach Authorization and Accept-Language;
+expired sessions clear and redirect. Language persists in the account and browser.
+Clinical names and identifiers remain unchanged.
 
-`MEDISAFE_API_URL=http://localhost:5000` configures the server-side proxy. Leave `NEXT_PUBLIC_API_URL=` empty for same-origin browser requests. Only public origins belong in frontend configuration; keep database credentials and JWT signing secrets in the backend.
+Both check pages share real medicine/food APIs and distinguish loading, empty, errors and retry.
+Image upload uses multipart and actual OCR. Review/correction/confirmation precede analysis.
+Alerts show combination, severity, explanation, risk, action, source and doctor guidance.
+Doctor pages require a verified role and patient consent through Care team.
+Knowledge pages display real database relationships and clinician-review alternatives.
 
-Shared catalog editing requires your backend user ID in `CATALOG_EDITOR_IDS`. Accounts without that permission can browse and check interactions. Private records always remain scoped to their owner.
-
-## Verify
+Listen uses browser SpeechSynthesis with a voice matching the selected language.
+On Windows, open Settings > Time & language > Speech > Manage voices > Add voices,
+add Hindi, then restart the browser. The browser must expose a matching hi-IN voice.
+See [Microsoft's voice installation guide](https://support.microsoft.com/en-us/accessibility/windows/narrator/appendix-a-supported-languages-and-voices).
+If a voice is absent or playback fails, the translated text remains usable.
+The verification machine exposed English voices but no Hindi voice; Hindi fallback was exercised.
 
 ```powershell
 npm run lint
 npx tsc --noEmit
-npm run build
 npx playwright install chromium
 npm run test:e2e
+npm run build
 ```
 
-The browser test starts isolated servers on ports 3100/5100 and uses the configured development PostgreSQL database. It removes only its own synthetic test records. Existing app processes on 3000/5000 are left running.
+With Windows Edge: `$env:E2E_BROWSER_CHANNEL='msedge'` before browser tests.
+Tests use actual development PostgreSQL for integration, plus isolated HTTP/TTS mocks for edge
+cases. Fixtures are marked synthetic and removed. E2E ports are 3100/5100, output .next-e2e.
+Run build after E2E finishes. A live dev build can remain isolated with
+`$env:NEXT_DIST_DIR='.next-e2e'` before `npm run build`.
 
-On Windows with Edge installed, use `$env:E2E_BROWSER_CHANNEL='msedge'` before `npm run test:e2e`.
-
-The backend still provides supplied-text OCR storage and an unchanged-text translation placeholder. There is no file-storage, automatic OCR, AI or real translation service to connect.
+The complete frontend audit currently includes five high findings in the dev-only ESLint
+fast-glob/micromatch/braces dependency chain. Production audit reports zero.
+No breaking Next/ESLint downgrade was applied solely to silence that advisory.

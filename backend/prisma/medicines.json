@@ -1,0 +1,14 @@
+[
+  { "name": "Paracetamol (Acetaminophen)", "genericName": "acetaminophen", "rxCui": "161" },
+  { "name": "Aspirin", "genericName": "aspirin", "rxCui": "1191" },
+  { "name": "Ibuprofen", "genericName": "ibuprofen", "rxCui": "5640" },
+  { "name": "Naproxen", "genericName": "naproxen", "rxCui": "7258" },
+  { "name": "Amoxicillin", "genericName": "amoxicillin", "rxCui": "723" },
+  { "name": "Metformin", "genericName": "metformin", "rxCui": "6809" },
+  { "name": "Atorvastatin", "genericName": "atorvastatin", "rxCui": "83367" },
+  { "name": "Amlodipine", "genericName": "amlodipine", "rxCui": "17767" },
+  { "name": "Omeprazole", "genericName": "omeprazole", "rxCui": "7646" },
+  { "name": "Cetirizine", "genericName": "cetirizine", "rxCui": "20610" },
+  { "name": "Simvastatin", "genericName": "simvastatin", "rxCui": "36567" },
+  { "name": "Clarithromycin", "genericName": "clarithromycin", "rxCui": "21212" }
+]

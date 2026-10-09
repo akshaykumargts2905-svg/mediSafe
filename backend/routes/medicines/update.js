@@ -7,7 +7,7 @@ const sendError = require("../../lib/errors");
 router.put("/", async (req, res) => {
   try {
     const id = positiveInt(req.params.id);
-    const data = readFields(req.body, {"name":"string","genericName":"string?","brandName":"string?","rxCui":"string?","atcCode":"string?"});
+    const data = readFields(req.body, {"name":"string","genericName":"string?","brandName":"string?","rxCui":"string?","atcCode":"string?","strength":"string?","dosageForm":"string?","aliases":"strings"});
     requireChanges(data);
     
     const medicine = await prisma.medicine.update({ where: { id }, data });

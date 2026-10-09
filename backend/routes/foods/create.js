@@ -6,7 +6,7 @@ const sendError = require("../../lib/errors");
 
 router.post("/", async (req, res) => {
   try {
-    const data = readFields(req.body, {"name":"string"}, ["name"]);
+    const data = readFields(req.body, {"name":"string","nameHi":"string?"}, ["name"]);
     
     const food = await prisma.food.create({ data });
     return res.status(201).json({ food });

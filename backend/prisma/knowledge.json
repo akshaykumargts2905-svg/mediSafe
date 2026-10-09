@@ -1,0 +1,90 @@
+{
+  "scope": "Small source-linked prototype knowledge base. Severity is an application review priority, not a source-issued rating. No match is not a safety guarantee. Ingredient entries do not encode patient-specific dose, indication or contraindications.",
+  "foods": [
+    { "name": "Grapefruit juice", "nameHi": "चकोतरे का रस" },
+    { "name": "Alcohol", "nameHi": "शराब" },
+    { "name": "Milk", "nameHi": "दूध" }
+  ],
+  "drugInteractions": [
+    {
+      "a": "1191", "b": "5640", "severity": "HIGH",
+      "description": "These medicines are both NSAIDs.",
+      "risk": "Taking them together can increase stomach ulcer risk.",
+      "recommendation": "Ask your prescriber before combining them; do not change prescribed aspirin yourself.",
+      "descriptionHi": "ये दोनों NSAID दवाएँ हैं।",
+      "riskHi": "साथ लेने से पेट में अल्सर का खतरा बढ़ सकता है।",
+      "recommendationHi": "साथ लेने से पहले डॉक्टर से पूछें; निर्धारित Aspirin खुद न बदलें।",
+      "sourceUrl": "https://www.nhs.uk/medicines/ibuprofen-for-adults/"
+    },
+    {
+      "a": "5640", "b": "7258", "severity": "HIGH",
+      "description": "This combination duplicates NSAID treatment.",
+      "risk": "Stomach ulcers and other adverse effects may increase.",
+      "recommendation": "Have a pharmacist or doctor review the combination before taking it.",
+      "descriptionHi": "इस संयोजन में दो NSAID दवाएँ हैं।",
+      "riskHi": "पेट के अल्सर और अन्य दुष्प्रभाव बढ़ सकते हैं।",
+      "recommendationHi": "साथ लेने से पहले डॉक्टर या फार्मासिस्ट से समीक्षा करवाएँ।",
+      "sourceUrl": "https://www.nhs.uk/medicines/ibuprofen-for-adults/"
+    },
+    {
+      "a": "36567", "b": "21212", "severity": "CRITICAL",
+      "description": "Clarithromycin and Simvastatin are contraindicated together.",
+      "risk": "Increased statin exposure can cause serious muscle injury.",
+      "recommendation": "Contact the prescriber promptly to review treatment before combining these medicines.",
+      "descriptionHi": "Clarithromycin और Simvastatin साथ लेना निषिद्ध है।",
+      "riskHi": "स्टैटिन का स्तर बढ़ने से मांसपेशियों को गंभीर नुकसान हो सकता है।",
+      "recommendationHi": "साथ लेने से पहले उपचार की समीक्षा के लिए डॉक्टर से तुरंत संपर्क करें।",
+      "sourceUrl": "https://www.sps.nhs.uk/articles/managing-interactions-between-macrolides-and-statins/"
+    },
+    {
+      "a": "83367", "b": "21212", "severity": "HIGH",
+      "description": "Clarithromycin can increase Atorvastatin exposure.",
+      "risk": "Muscle injury risk can increase.",
+      "recommendation": "Ask the prescriber to review an alternative antibiotic or the statin plan.",
+      "descriptionHi": "Clarithromycin से Atorvastatin का स्तर बढ़ सकता है।",
+      "riskHi": "मांसपेशियों को नुकसान का खतरा बढ़ सकता है।",
+      "recommendationHi": "डॉक्टर से दूसरे एंटीबायोटिक या स्टैटिन योजना की समीक्षा करवाएँ।",
+      "sourceUrl": "https://www.sps.nhs.uk/articles/managing-interactions-between-macrolides-and-statins/"
+    }
+  ],
+  "foodInteractions": [
+    {
+      "medicine": "36567", "food": "Grapefruit juice", "severity": "HIGH",
+      "description": "Grapefruit juice interferes with Simvastatin treatment.",
+      "risk": "The medicine's effects and adverse effects can change.",
+      "recommendation": "Avoid grapefruit juice and discuss your diet with a pharmacist.",
+      "descriptionHi": "चकोतरे का रस Simvastatin के उपचार में बाधा डालता है।",
+      "riskHi": "दवा का असर और दुष्प्रभाव बदल सकते हैं।",
+      "recommendationHi": "चकोतरे का रस न पिएँ और आहार पर फार्मासिस्ट से बात करें।",
+      "sourceUrl": "https://www.nhs.uk/medicines/simvastatin/"
+    },
+    {
+      "medicine": "83367", "food": "Grapefruit juice", "severity": "MODERATE",
+      "description": "Large amounts of grapefruit juice can affect Atorvastatin.",
+      "risk": "The chance of side effects can increase.",
+      "recommendation": "Avoid large amounts and check suitable intake with your pharmacist.",
+      "descriptionHi": "अधिक चकोतरे का रस Atorvastatin के असर को बदल सकता है।",
+      "riskHi": "दुष्प्रभाव की संभावना बढ़ सकती है।",
+      "recommendationHi": "अधिक मात्रा से बचें और उचित मात्रा फार्मासिस्ट से पूछें।",
+      "sourceUrl": "https://www.nhs.uk/medicines/atorvastatin/"
+    },
+    {
+      "medicine": "20610", "food": "Alcohol", "severity": "MODERATE",
+      "description": "Alcohol can add to sleepiness while taking Cetirizine.",
+      "risk": "Drowsiness can affect driving and operating machinery.",
+      "recommendation": "Avoid alcohol; do not drive if sleepy. Ask a pharmacist if unsure.",
+      "descriptionHi": "Cetirizine के साथ शराब से नींद बढ़ सकती है।",
+      "riskHi": "सुस्ती से वाहन या मशीन चलाना प्रभावित हो सकता है।",
+      "recommendationHi": "शराब से बचें; नींद आने पर वाहन न चलाएँ। संदेह हो तो फार्मासिस्ट से पूछें।",
+      "sourceUrl": "https://www.nhs.uk/medicines/cetirizine/common-questions-about-cetirizine/"
+    }
+  ],
+  "alternatives": [
+    {
+      "medicine": "5640", "alternative": "161",
+      "reason": "For pain, a clinician may consider Paracetamol if suitable. It is not an equivalent treatment for every indication.",
+      "reasonHi": "दर्द के लिए डॉक्टर उपयुक्त होने पर Paracetamol पर विचार कर सकते हैं। यह हर स्थिति में समान उपचार नहीं है।",
+      "sourceUrl": "https://www.nhs.uk/medicines/ibuprofen-for-adults/"
+    }
+  ]
+}

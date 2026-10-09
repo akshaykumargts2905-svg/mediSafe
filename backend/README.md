@@ -1,511 +1,124 @@
-# MediSafe REST API
+# MediSafe backend
 
-Simple CommonJS Node.js + Express + Prisma + PostgreSQL backend using the existing eleven Prisma models. Each endpoint has its own route file and an async handler with try/catch. There are 59 requested API endpoints plus the health endpoint. Authentication uses JWT Bearer tokens and bcrypt (12 rounds). No external OCR, translation service, AI service, or Neo4j is used.
+Express 5, Prisma 6 and PostgreSQL; CommonJS modules. See the root [setup guide](../README.md)
+and [verification report](../VERIFICATION.md). There are 66 mounted HTTP endpoints, including health;
+the [endpoint inventory](../frontend/INTEGRATION.md) maps every route to its consumer.
 
-## Setup
+## Database and seed
 
-Run commands from `backend/`. Use Node.js 20 or newer.
+The original models are retained. User is also the patient identity. The extension adds
+`UserRole`, `InteractionSeverity`, `CareAccess`, `PrescriptionImage`, `AlternativeMedicine`,
+medicine strength/form/aliases, OCR review metadata and bilingual clinical fields.
 
-Put your database connection in **backend/.env** (the existing file is preserved):
-
-```dotenv
-DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DATABASE?schema=public"
-PORT=5000
-JWT_SECRET=replace-with-a-unique-random-secret-of-at-least-32-bytes
-JWT_EXPIRES_IN=1d
-CATALOG_EDITOR_IDS=
-```
-
-For a fresh checkout, copy `.env.example` to `.env` and replace the placeholders. Keep any connection options your PostgreSQL provider requires. Never commit credentials.
+The extension migration preserves existing severity columns through an in-place cast.
+Legacy MAJOR/SEVERE map to HIGH, MEDIUM to MODERATE, MINOR to LOW. Unknown severity values
+abort the transaction for explicit review; they are not silently discarded.
 
 ```powershell
-cd backend
-npm install
+npm ci
+npx prisma migrate deploy
 npx prisma generate
-npx prisma migrate dev --name init
+npm run catalog:seed
+npm run ocr:setup
 npm run dev
 ```
 
-The initial migration already exists and was applied in this workspace. The migration command above checks for pending development changes; do not reset the database. To apply checked-in migrations in a deployment, use `npx prisma migrate deploy`. Use `npm start` to run without nodemon.
-
-Base URL: **http://localhost:5000**.
-
-## Authentication and security
-
-The existing schema, route URLs and JSON resource keys are unchanged. Login now adds a `token` field. API clients must send that token for every `/api/*` route except registration and login. The root health endpoint remains public.
-
-Only email is supported for login because the existing schema has no phone or username identifier.
-
-### Configuration
-
-Required packages added: **bcryptjs** and **jsonwebtoken**.
-
-```powershell
-cd backend
-npm install
-npm run passwords:upgrade
-npm run dev
-```
-
-No schema migration or database reset is required for this security update. The upgrade command is idempotent: it hashes existing plaintext passwords, preserves existing bcrypt hashes exactly and never logs passwords. Null passwords are left alone. Recognizable unsupported hash formats or passwords over bcrypt's 72-byte limit are preserved and reported as requiring an administrator-assisted password reset; this project does not add a reset endpoint or allow plaintext login.
-
-The local `.env` has already been configured with a cryptographically random JWT secret. On another machine, generate a fresh secret locally, put it in `JWT_SECRET`, and never commit it:
-
-```powershell
-node -e "console.log(require('node:crypto').randomBytes(64).toString('hex'))"
-```
-
-`JWT_EXPIRES_IN=1d` sets a one-day lifetime; positive values such as `1h` also work. Startup fails if the secret is missing, short, or an obvious placeholder.
-
-`CATALOG_EDITOR_IDS` is a comma-separated list of trusted, existing user IDs that may create/update/delete shared medicines, foods and interaction records. It is empty by default, so those writes return 403. After choosing trusted accounts, set e.g. `CATALOG_EDITOR_IDS=7,12` using their real IDs and restart the server. This is a server-only permission setting, never a registration field. Any authenticated user can read the catalog and check interactions.
-
-### Login flow
-
-1. Validate and normalize the email; read the supplied password without trimming it.
-2. Find the user by email and verify the stored bcrypt hash with `bcrypt.compare()`.
-3. Return the same generic 401 response for a missing user, wrong password or unsupported/legacy plaintext password.
-4. Sign an HS256 JWT containing only `userId` plus issued-at, expiry, issuer and audience claims.
-5. Return `{ "user": { "id": 1, "name": "...", "email": "...", "createdAt": "..." }, "token": "..." }`. No password or hash is returned.
-
-Registration and password changes hash passwords with 12 rounds. New passwords must contain at least 8 characters and at most 72 UTF-8 bytes to prevent bcrypt truncation. Already stored hashes are never rehashed merely because a user logs in.
-
-### Ownership rules
-
-- `Authorization: Bearer <token>` is the only accepted identity. `x-user-id` is ignored.
-- The middleware verifies the signature, HS256 algorithm, expiry, issuer, audience and numeric user ID, then checks that the account still exists. Invalid, expired, missing and deleted-account tokens return 401.
-- Private queries include ownership conditions through `Prescription.userId`. Requesting another user's private resource returns 404 without confirming that it exists.
-- Prescription creation derives userId from the JWT. The old body userId field is still accepted if it matches; a different ID returns 403.
-- Private lists and doctor dashboard counts are scoped to the authenticated user. Query filters cannot override that scope.
-- The schema does not define doctor roles or doctor/patient permissions. Doctor endpoints retain their URLs but only access the caller's prescriptions. Being a catalog editor does not grant access to anyone else's private data.
-- Logout is client-side token removal. There is no refresh-token/session store; an issued token otherwise lasts until expiry or secret rotation. Password changes do not revoke previously issued JWTs. Deleted accounts are rejected immediately.
-
-### Register → login → protected request
-
-Use these requests in Postman, with raw JSON bodies:
-
-```http
-POST http://localhost:5000/api/auth/register
-Content-Type: application/json
-
-{"name":"Demo User","email":"demo@example.com","password":"demo-password"}
-```
-
-```http
-POST http://localhost:5000/api/auth/login
-Content-Type: application/json
-
-{"email":"demo@example.com","password":"demo-password"}
-```
-
-Copy `token` from the login response:
-
-```http
-GET http://localhost:5000/api/users/me
-Authorization: Bearer <token-from-login>
-```
-
-Creating a prescription no longer needs a userId:
-
-```http
-POST http://localhost:5000/api/prescriptions
-Authorization: Bearer <token-from-login>
-Content-Type: application/json
-
-{"fileName":"demo-prescription.txt"}
-```
-
-In Postman, set the collection's Authorization type to **Bearer Token**, value `{{token}}`, and use **No Auth** for register/login. Save the login token in its Tests/Post-response script:
-
-```javascript
-pm.collectionVariables.set("token", pm.response.json().token);
-```
-
-### Changed files for this security update
-
-```text
-Modified:
-  server.js
-  package.json, package-lock.json
-  .env (local only), .env.example
-  README.md
-  routes/auth/register.js, login.js
-  routes/users/getMe.js, updateMe.js, deleteMe.js
-  routes/prescriptions/create.js, getAll.js, getById.js, delete.js
-  routes/prescriptionMedicines/create.js, getAll.js, update.js, delete.js
-  routes/ocr/process.js, getByPrescription.js, update.js
-  routes/alerts/create.js, getAll.js, getById.js, markRead.js, delete.js
-  routes/safetyReports/generate.js, getByPrescription.js, getAll.js
-  routes/doctor/dashboard.js, getPrescriptions.js, getPrescriptionById.js
-  routes/doctor/getAlerts.js, createRecommendation.js, getRecommendations.js
-  routes/doctor/updateRecommendation.js
-  routes/analyze/analyzePrescription.js
-  tests/api.test.js, integration.test.js
-
-Created:
-  lib/auth.js, passwords.js
-  middleware/authenticate.js, catalogAccess.js
-  scripts/hash-existing-passwords.js
-  tests/auth.test.js
-```
-
-The existing `.gitignore` already ignores `.env`; no secret is added to tracked files.
-
-## Folder structure
-
-```text
-backend/
-├── package.json
-├── package-lock.json
-├── server.js
-├── .env                         # Existing local credentials; ignored by Git
-├── .env.example
-├── .gitignore
-├── README.md
-├── prisma.config.ts
-├── prisma/
-│   ├── schema.prisma             # Unchanged by this API implementation
-│   └── migrations/
-│       ├── migration_lock.toml
-│       └── 20261007104637_init/
-│           └── migration.sql
-├── lib/
-│   ├── prisma.js                 # One shared Prisma client
-│   ├── validation.js             # Small input-validation helpers
-│   ├── errors.js                 # JSON error responses
-│   ├── userFields.js             # Public user fields (no password)
-│   ├── safetyReport.js           # Shared report calculation
-│   ├── auth.js                   # JWT signing/configuration/verification
-│   └── passwords.js              # bcrypt helpers
-├── middleware/
-│   ├── authenticate.js
-│   └── catalogAccess.js
-├── scripts/
-│   └── hash-existing-passwords.js
-├── tests/
-│   ├── api.test.js
-│   ├── auth.test.js
-│   └── integration.test.js
-└── routes/
-    ├── health.js
-    ├── auth/
-    │   ├── register.js
-    │   └── login.js
-    ├── users/
-    │   ├── getMe.js
-    │   ├── updateMe.js
-    │   └── deleteMe.js
-    ├── prescriptions/
-    │   ├── create.js
-    │   ├── getAll.js
-    │   ├── getById.js
-    │   └── delete.js
-    ├── ocr/
-    │   ├── process.js
-    │   ├── update.js
-    │   └── getByPrescription.js
-    ├── medicines/
-    │   ├── create.js
-    │   ├── getAll.js
-    │   ├── search.js
-    │   ├── getById.js
-    │   ├── update.js
-    │   └── delete.js
-    ├── prescriptionMedicines/
-    │   ├── getAll.js
-    │   ├── create.js
-    │   ├── update.js
-    │   └── delete.js
-    ├── drugInteractions/
-    │   ├── create.js
-    │   ├── getAll.js
-    │   ├── getById.js
-    │   ├── update.js
-    │   ├── delete.js
-    │   └── check.js
-    ├── foods/
-    │   ├── create.js
-    │   ├── getAll.js
-    │   ├── getById.js
-    │   ├── update.js
-    │   └── delete.js
-    ├── foodInteractions/
-    │   ├── create.js
-    │   ├── getAll.js
-    │   ├── getById.js
-    │   ├── update.js
-    │   ├── delete.js
-    │   └── check.js
-    ├── alerts/
-    │   ├── create.js
-    │   ├── getAll.js
-    │   ├── getById.js
-    │   ├── markRead.js
-    │   └── delete.js
-    ├── safetyReports/
-    │   ├── generate.js
-    │   ├── getByPrescription.js
-    │   └── getAll.js
-    ├── doctor/
-    │   ├── dashboard.js
-    │   ├── getPrescriptions.js
-    │   ├── getPrescriptionById.js
-    │   ├── getAlerts.js
-    │   ├── createRecommendation.js
-    │   ├── getRecommendations.js
-    │   └── updateRecommendation.js
-    ├── languages/
-    │   └── getLanguages.js
-    ├── translate/
-    │   └── translate.js
-    ├── knowledgeGraph/
-    │   ├── getGraph.js
-    │   └── getMedicineGraph.js
-    └── analyze/
-        └── analyzePrescription.js
-```
-
-`server.js` mounts each file explicitly. `mergeParams: true` makes mounted parameters such as `:prescriptionId` available to the route. The helpers avoid repeating connection setup and basic validation; CRUD queries remain inside each endpoint file.
-
-## Request and response conventions
-
-- Send JSON with `Content-Type: application/json`.
-- IDs are positive PostgreSQL integers. Unknown body fields are ignored. Updates must contain at least one editable field.
-- Create endpoints return **201**. Reads, updates, deletes, checks, analysis, report generation and OCR upserts return **200** with JSON.
-- Errors return `{ "message": "..." }`: **400** invalid input, **401** invalid login/token, **403** insufficient permission, **404** missing resource/route, **409** duplicate values, foreign-key conflicts or concurrent updates, **413** oversized JSON, **500** unexpected database/server errors.
-- Single results use keys such as `user`, `medicine`, `prescription`, `interaction`, `ocrResult`, `report` or `recommendation`. Lists use plural keys. Languages returns an array.
-- Login returns a safe user and JWT token. All subsequent API requests require an Authorization Bearer header; the authenticated user ID is available as `req.userId`.
-- Registration and password changes store bcrypt hashes; login uses bcrypt comparison. Responses never include passwords or hashes.
-- Nullable fields accept `null` to clear them. Email addresses are trimmed and lowercased. Empty strings are rejected.
-- A list with no results returns an empty array. Interaction checks with existing medicines/foods and no match return `{ "found": false, "interaction": null }`.
-- There is no file upload endpoint: prescription creation stores `fileName` and optional `fileUrl` metadata.
-- CORS permits the comma-separated origins in FRONTEND_ORIGINS (default http://localhost:3000). The frontend uses a same-origin Next.js proxy by default.
-
-## All endpoints
-
-| Method | URL | Purpose |
-| --- | --- | --- |
-| POST | `/api/auth/register` | Register a user |
-| POST | `/api/auth/login` | Verify bcrypt password; return user and JWT |
-| GET | `/api/users/me` | get current user |
-| PUT | `/api/users/me` | update current user |
-| DELETE | `/api/users/me` | delete current user |
-| POST | `/api/prescriptions` | Create prescription |
-| GET | `/api/prescriptions` | List prescriptions |
-| GET | `/api/prescriptions/:id` | Get prescription |
-| DELETE | `/api/prescriptions/:id` | Delete Prescription |
-| POST | `/api/ocr/process/:prescriptionId` | Save supplied OCR text (upsert) |
-| PUT | `/api/ocr/:prescriptionId` | Update OCR result |
-| GET | `/api/ocr/:prescriptionId` | Get prescription OCR result |
-| POST | `/api/medicines` | Create medicine |
-| GET | `/api/medicines` | List medicines |
-| GET | `/api/medicines/search` | Search name, generic name, brand, or RxCUI |
-| GET | `/api/medicines/:id` | Get medicine |
-| PUT | `/api/medicines/:id` | Update medicine |
-| DELETE | `/api/medicines/:id` | Delete Medicine |
-| GET | `/api/prescriptions/:id/medicines` | List linked medicines |
-| POST | `/api/prescriptions/:id/medicines` | Create prescriptionMedicine |
-| PUT | `/api/prescriptions/:id/medicines/:medicineId` | Update dosage, frequency, duration |
-| DELETE | `/api/prescriptions/:id/medicines/:medicineId` | Unlink a medicine |
-| POST | `/api/drug-interactions` | Create interaction |
-| GET | `/api/drug-interactions` | List interactions |
-| GET | `/api/drug-interactions/:id` | Get interaction |
-| PUT | `/api/drug-interactions/:id` | Update interaction |
-| DELETE | `/api/drug-interactions/:id` | Delete Interaction |
-| POST | `/api/drug-interactions/check` | Check an interaction in either direction |
-| POST | `/api/foods` | Create food |
-| GET | `/api/foods` | List foods |
-| GET | `/api/foods/:id` | Get food |
-| PUT | `/api/foods/:id` | Update food |
-| DELETE | `/api/foods/:id` | Delete Food |
-| POST | `/api/food-interactions` | Create interaction |
-| GET | `/api/food-interactions` | List interactions |
-| GET | `/api/food-interactions/:id` | Get interaction |
-| PUT | `/api/food-interactions/:id` | Update interaction |
-| DELETE | `/api/food-interactions/:id` | Delete Interaction |
-| POST | `/api/food-interactions/check` | Check a medicine/food pair |
-| POST | `/api/alerts` | Create alert |
-| GET | `/api/alerts` | List alerts |
-| GET | `/api/alerts/:id` | Get alert |
-| PATCH | `/api/alerts/:id/read` | Mark an alert as read |
-| DELETE | `/api/alerts/:id` | Delete Alert |
-| POST | `/api/safety-reports/generate/:prescriptionId` | Create/refresh report from stored alerts |
-| GET | `/api/safety-reports/:prescriptionId` | Get the latest report for a prescription |
-| GET | `/api/safety-reports` | List reports |
-| GET | `/api/doctor/dashboard` | Get database dashboard counts |
-| GET | `/api/doctor/prescriptions` | List prescriptions |
-| GET | `/api/doctor/prescriptions/:id` | Get prescription |
-| GET | `/api/doctor/alerts` | List alerts |
-| POST | `/api/doctor/recommendations` | Create recommendation |
-| GET | `/api/doctor/recommendations/:prescriptionId` | List recommendations for a prescription |
-| PUT | `/api/doctor/recommendations/:id` | Update recommendation |
-| GET | `/api/languages` | List supported placeholder languages |
-| POST | `/api/translate` | Return unchanged text as a translation placeholder |
-| GET | `/api/knowledge-graph` | Get medicines, foods and relationship records |
-| GET | `/api/knowledge-graph/medicine/:id` | Get a medicine with relationships in both directions |
-| POST | `/api/analyze/:prescriptionId` | Check stored interactions, refresh generated alerts/report |
-| GET | `/` | API health |
-
-Optional list filters:
-
-| Endpoints | Query parameter |
-| --- | --- |
-| `GET /api/prescriptions`, `GET /api/doctor/prescriptions` | `userId` |
-| `GET /api/alerts`, `GET /api/doctor/alerts`, `GET /api/safety-reports` | `prescriptionId` |
-
-## Editable fields
-
-An asterisk indicates a field required on creation. PUT endpoints accept a partial update.
-
-| Resource | Fields |
-| --- | --- |
-| Register | `name*`, `email*`, `password*` |
-| Login | `email*`, `password*` |
-| Current user | `name`, `email`, `password` |
-| Prescription | `fileName*`, `fileUrl`, `ocrText`; optional `userId` must match JWT identity |
-| OCR | `extractedText*`, `confidence` (0–1), `language`, `status`; extractedText only required by POST |
-| Medicine | `name*`, `genericName`, `brandName`, `rxCui`, `atcCode` |
-| Prescription medicine | `medicineId*`, `dosage`, `frequency`, `duration`; PUT edits the last three fields |
-| Drug interaction | `medicineAId*`, `medicineBId*`, `severity*`, `description*`, `recommendation` |
-| Food | `name*` |
-| Food interaction | `medicineId*`, `foodId*`, `severity*`, `description*`, `recommendation` |
-| Alert | `prescriptionId*`, `type*`, `severity*`, `title*`, `message*`, `language`, `isRead` |
-| Doctor recommendation | `prescriptionId*`, `medicineId*`, `reason*`, `alternative`, `status`; PUT edits reason, alternative and status |
-| Translation | `text*`, `language*` (`en` or `hi`) |
-| Analysis | Optional `foodIds` array |
-
-`severity`, `status` and `type` are strings as defined by your schema, not added enums. The report treats HIGH, SEVERE, CRITICAL and MAJOR as high-risk severity values, ignoring case.
-
-## Special endpoint behavior
-
-**OCR:** POST stores supplied extracted text with an upsert (one OCRResult per prescription). Its default status is COMPLETED. POST and PUT also synchronize Prescription.ocrText in the same transaction. No image processing occurs.
-
-**Drug checks:** queries check both directions. Creates and updates sort the medicine IDs so the unique pair constraint prevents new reverse duplicates. Identical medicine IDs are rejected.
-
-**Analysis:** reads linked medicines and stored interaction records. If `foodIds` is omitted, returns all known food cautions for those medicines; this does not establish that a patient consumes those foods. `foodIds: []` skips food cautions, and a nonempty array limits the check to those foods.
-
-Each analysis refreshes alerts of type ANALYSIS_DRUG_DRUG and ANALYSIS_DRUG_FOOD, preserving manual alerts. These types are reserved and cannot be submitted through alert creation. Refreshed generated alerts get new IDs and are unread again. The latest report is updated; repeated analysis does not accumulate generated alerts or reports. A transaction keeps these writes together. Concurrent conflicting requests receive 409 and can be retried.
-
-**Reports:** report generation summarizes currently stored alerts; use analysis first to detect interactions. Counts include both read and unread alerts. Status is HIGH_RISK, REVIEW_REQUIRED, or NO_KNOWN_ALERTS. An empty prescription has zero medicines and no detected interactions; no known alerts is not a clinical safety guarantee. The schema allows report history, so the latest report is refreshed while any older records remain.
-
-**Translation:** returns the original text unchanged with `placeholder: true`. Supported language codes are en and hi.
-
-**Knowledge graph:** returns medicines, foods and relationship records from PostgreSQL. The medicine-specific graph includes outgoing and incoming drug relationships and food relationships.
-
-**Deletion:** follows the schema's cascades. Deleting a user removes their prescriptions and associated records. Deleting a medicine that is still used by a prescription or doctor recommendation returns 409. Remove those references first.
-
-## Postman walkthrough
-
-Set a Postman variable `baseUrl` to `http://localhost:5000`. Use raw JSON request bodies and Bearer Token authorization for all protected requests. To run the catalog-writing examples, first add your real user ID to CATALOG_EDITOR_IDS in .env and restart. Save returned IDs into the variables shown below; example data is synthetic and is not a clinical interaction dataset.
-
-1. **Register:** POST `{{baseUrl}}/api/auth/register`
-
-   ```json
-   { "name": "Demo User", "email": "demo@example.com", "password": "demo-password" }
-   ```
-
-   Save `user.id` as `userId`. Login with POST `/api/auth/login` using the email and password. Save the response token as `token`. GET `/api/users/me` with header `Authorization: Bearer {{token}}`.
-
-2. **Create a prescription:** POST `{{baseUrl}}/api/prescriptions`
-
-   ```json
-   { "userId": {{userId}}, "fileName": "demo-prescription.txt" }
-   ```
-
-   Save `prescription.id` as `prescriptionId`.
-
-3. **Save OCR text:** POST `{{baseUrl}}/api/ocr/process/{{prescriptionId}}`
-
-   ```json
-   { "extractedText": "Demo Medicine A and Demo Medicine B", "language": "en", "confidence": 0.9 }
-   ```
-
-   Response contains `message: "OCR result saved"` and `ocrResult`. Text is not automatically converted into linked medicines.
-
-4. **Create two medicines:** POST `{{baseUrl}}/api/medicines` twice, once per body:
-
-   ```json
-   { "name": "Demo Medicine A", "genericName": "Synthetic A" }
-   ```
-
-   ```json
-   { "name": "Demo Medicine B", "genericName": "Synthetic B" }
-   ```
-
-   Save IDs as `medicineAId` and `medicineBId`. Try GET `/api/medicines/search?q=demo`.
-
-5. **Link both medicines:** POST `{{baseUrl}}/api/prescriptions/{{prescriptionId}}/medicines` twice, changing the ID:
-
-   ```json
-   { "medicineId": {{medicineAId}}, "dosage": "Demo only", "frequency": "Demo schedule" }
-   ```
-
-6. **Store a synthetic interaction:** POST `{{baseUrl}}/api/drug-interactions`
-
-   ```json
-   {
-     "medicineAId": {{medicineAId}},
-     "medicineBId": {{medicineBId}},
-     "severity": "HIGH",
-     "description": "Synthetic interaction for testing only",
-     "recommendation": "Demo recommendation"
-   }
-   ```
-
-   Check the reverse pair with POST `/api/drug-interactions/check`:
-
-   ```json
-   { "medicineAId": {{medicineBId}}, "medicineBId": {{medicineAId}} }
-   ```
-
-7. **Optional food caution:** POST `/api/foods` with `{ "name": "Demo Food" }`. Save `food.id` as `foodId`, then POST `/api/food-interactions`:
-
-   ```json
-   {
-     "medicineId": {{medicineAId}},
-     "foodId": {{foodId}},
-     "severity": "LOW",
-     "description": "Synthetic food caution for testing"
-   }
-   ```
-
-   POST `/api/food-interactions/check` with `medicineId` and `foodId` to check the pair.
-
-8. **Analyze:** POST `{{baseUrl}}/api/analyze/{{prescriptionId}}`
-
-   ```json
-   { "foodIds": [{{foodId}}] }
-   ```
-
-   Expect `drugInteractions`, `foodInteractions`, `alerts` and `report`. With the above fresh sample, totalMedicines is 2, totalAlerts is 2, highRiskCount is 1 and overallStatus is HIGH_RISK. Repeat the request to confirm counts do not increase.
-
-9. **Reports and alerts:** GET `/api/safety-reports/{{prescriptionId}}`, GET `/api/alerts?prescriptionId={{prescriptionId}}`, then PATCH `/api/alerts/{{alertId}}/read` with no body. POST `/api/safety-reports/generate/{{prescriptionId}}` refreshes counts from stored alerts.
-
-10. **Doctor recommendation:** POST `{{baseUrl}}/api/doctor/recommendations`
-
-    ```json
-    { "prescriptionId": {{prescriptionId}}, "medicineId": {{medicineAId}}, "reason": "Demo review", "alternative": "Demo alternative" }
-    ```
-
-    PUT `/api/doctor/recommendations/{{recommendationId}}` with `{ "status": "REVIEWED" }`. GET `/api/doctor/dashboard` for counts.
-
-11. **Translation:** POST `{{baseUrl}}/api/translate`
-
-    ```json
-    { "text": "Demo message", "language": "hi" }
-    ```
-
-    The text remains unchanged. GET `/api/knowledge-graph/medicine/{{medicineAId}}` to see linked drug/food records.
-
-## Verification
-
-```powershell
-npm test
-npm run test:integration
-npx prisma validate
-```
-
-`npm test` checks route registration, validation, JSON errors, placeholders, Prisma errors, bcrypt registration/password updates, password upgrade idempotency, minimal JWT claims, missing/invalid/expired/tampered tokens, deleted users and catalog permissions using isolated mocks.
-
-`npm run test:integration` uses DATABASE_URL and exercises all endpoints through HTTP. It creates two uniquely named synthetic users, authenticates with real JWTs, tests hashes in PostgreSQL, repeated analysis, reverse pairs, relation queries, cascades and cross-user IDOR prevention across every private route family, then removes only the records it created, including on assertion failure. Catalog permissions are enabled only within the test process. Use a development database.
-
-Runtime dependencies are Express, dotenv, Prisma Client, bcryptjs and jsonwebtoken, plus Prisma CLI and nodemon for development. npm currently reports six high-severity findings in the existing Prisma/nodemon dependency trees; its suggested fixes are breaking downgrades and were not applied.
+`catalog:seed` and `npx prisma db seed` run the same transactional seed:
+12 generic medicines, 3 foods, 4 drug-drug records, 3 drug-food records and 1 alternative.
+Unique RxCUI/pair/name constraints plus skipDuplicates preserve IDs and existing edits on rerun.
+
+Generic names and identifiers were checked using the
+[NLM RxNorm API](https://lhncbc.nlm.nih.gov/RxNav/APIs/RxNormAPIs.html).
+Strength and dosage form are nullable because these seeds represent ingredients, not fabricated
+clinical products. The schema/editor support actual product details.
+Every interaction/alternative in `prisma/knowledge.json` carries its source URL.
+Severity is an application review priority, not a claim of an externally validated risk score.
+Read the source and obtain clinical review before expanding or deploying this small dataset.
+
+## Authentication and authorization
+
+- Registration/login are public. All other `/api/*` requests require a signed JWT and existing user.
+- Passwords use bcrypt (12 rounds), minimum 8 characters, maximum 72 UTF-8 bytes.
+- JWT checks cover HS256, issuer, audience, expiry and user ID. No password/hash is returned.
+- `x-user-id` cannot set identity. Patient queries use prescription ownership.
+- Registration/profile cannot assign DOCTOR or catalog editor rights.
+- `npm run doctor:grant -- existing-email` provisions an already registered, verified clinician.
+- Doctor routes require DOCTOR plus patient sharing through CareAccess. Own records remain accessible.
+  Catalog editor status never grants patient access.
+- Patients alone grant/revoke sharing. Shared clinicians can read summaries/images and create/update
+  recommendations; they cannot mutate patient prescriptions or OCR.
+- Shared catalogs are readable by every authenticated account. Writes require `CATALOG_EDITOR_IDS`.
+- JWT logout clears the browser token. Existing tokens expire naturally; this prototype has no
+  server session/revocation store. Password changes do not invalidate other issued tokens.
+- `npm run passwords:upgrade` remains available for legacy plaintext records. It preserves existing
+  bcrypt hashes and never logs passwords. No automatic default accounts are created.
+
+## OCR and normalization
+
+`POST /api/prescriptions/upload` accepts multipart `image` and `language=en|hi`.
+Multer limits size/count; Sharp verifies actual bytes, MIME, dimensions (16 MP) and single-page
+format, strips metadata and produces a bounded PNG. Only PNG/JPEG/WebP are accepted.
+The normalized image is stored in the private PrescriptionImage relation, not a public directory.
+`GET /api/prescriptions/:id/image` rechecks owner/consent and sends no-store image bytes.
+
+Tesseract runs locally using pinned npm English/Hindi model packages extracted by `ocr:setup`.
+No third-party OCR key is required. Two jobs may run concurrently; each has a 90-second deadline.
+`OCR_DATA_DIR` optionally overrides the model directory.
+
+Extraction returns text, confidence and catalog candidates. Matching normalizes case/punctuation,
+generic/brand/alias names and RxCUI-linked records. A single-character near match is only a POSSIBLE
+suggestion; confidence is capped by the OCR confidence. No detection automatically links medicines.
+
+Manual text POST/PUT endpoints remain available. Corrections update candidates and reviewVersion,
+preserve image provenance, reset confirmation and invalidate generated analysis.
+Client-supplied confidence/status cannot assert an OCR success.
+
+`POST /api/ocr/:prescriptionId/confirm` takes
+`{medicineIds: [actualIds], reviewVersion: currentVersion}`.
+The transaction validates IDs/version/ownership and saves only the confirmed selection.
+Existing dosage instructions on retained links are preserved.
+
+## Interactions, alerts, reports and graph
+
+Checks query stored medicine pairs (both directions) or medicine-food pairs.
+Supported severities: LOW, MODERATE, HIGH, CRITICAL.
+Responses contain description, risk, recommendation, source, localized display fields and related
+alternatives. An absent record is explicitly not a safety guarantee.
+
+Analysis requires linked medicines and confirmed OCR when an OCR record exists.
+Omitted foodIds checks all known food cautions; [] skips food checks; explicit IDs limit the scope.
+It atomically refreshes analysis-owned alerts and the latest report, preserving manual alerts.
+Repeated analysis does not accumulate generated records.
+Medicine edits/text corrections/confirmation invalidate old generated alerts and reports.
+Report generation runs the same analysis service to avoid producing an unchecked safety report.
+
+Graph endpoints use real relational records including alternatives; no separate graph infrastructure.
+Alternatives do not replace medicines automatically.
+
+## Language and voice contract
+
+Authentication resolves language from a valid query/header or the stored user preference.
+Responses preserve canonical values and add localized display values. Medicine names/RxCUI/ATC are
+never passed through the UI translation dictionary.
+Hindi fields cover seeded explanations, risks, recommendations, alerts and alternatives.
+Custom untranslated content is retained and identified instead of fabricated.
+
+`POST /api/translate` takes `{text, source: "en"|"hi", language: "en"|"hi"}`.
+It uses exact bilingual knowledge matches first, then the configured LibreTranslate endpoint.
+Same-source/target text is explicitly marked `same-language`.
+An unavailable translation returns 503. Provider translation masks medicine names/identifiers and
+rejects responses that lose those markers. No private database records are searched to translate
+another patient's content. Voice playback lives in the frontend and uses the selected language.
+
+## Errors and operations
+
+Validation/ownership/database errors map to JSON 400/401/403/404/409/413/415/422/429/500/503/504.
+Internal stack traces and credentials are not exposed. Parameterized Prisma operations are used.
+Secrets stay in ignored backend/.env; images are returned only through the authenticated route.
+CORS is restricted by FRONTEND_ORIGINS; same-origin Next proxy needs no public API secret.
+
+Use Node's built-in watch mode for development. The unused nodemon dependency was removed.
+The compatible deepmerge-ts override addresses the Prisma config dependency advisory.
+Backend npm audit is clean after this change; rerun it as dependencies evolve.
+
+See root setup for exact commands and the optional translation provider configuration.

@@ -6,7 +6,7 @@ const sendError = require("../../lib/errors");
 
 router.post("/", async (req, res) => {
   try {
-    const data = readFields(req.body, {"userId":"id","fileName":"string","fileUrl":"string?","ocrText":"string?"}, ["fileName"]);
+    const data = readFields(req.body, {"userId":"id","fileName":"string","fileUrl":"url?","ocrText":"string?"}, ["fileName"]);
     if (data.userId !== undefined && data.userId !== req.userId) {
       return res.status(403).json({ message: "Cannot create prescriptions for another user" });
     }

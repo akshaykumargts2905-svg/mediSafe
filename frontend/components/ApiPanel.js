@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import Workspace from "./Workspace";
 import ErrorMessage from "./ErrorMessage";
+import { useLanguage } from "../lib/i18n";
 
 export default function ApiPanel({ title, description, endpoint, actions = [], allowMissing = false, children }) {
+  const { language, t } = useLanguage();
   const [state, setState] = useState({ data: null, error: "", busy: true, notice: "" });
   const sequence = useRef(0);
   const controller = useRef(null);
@@ -35,7 +37,7 @@ export default function ApiPanel({ title, description, endpoint, actions = [], a
     // This mutable ref is a request counter, not a DOM node captured by the effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     return () => { abort.abort(); sequence.current++; };
-  }, [endpoint, allowMissing]);
+  }, [endpoint, allowMissing, language]);
   async function run(action) {
     setState((previous) => ({ ...previous, busy: true, error: "", notice: "" }));
     try {
@@ -50,14 +52,14 @@ export default function ApiPanel({ title, description, endpoint, actions = [], a
     }
   }
   return <Workspace title={title} description={description}>
-    <div className="toolbar">{actions.map((action) => <button className="button" key={action.label} disabled={state.busy} onClick={() => run(action)}>{action.label}</button>)}
-      <button className="button secondary" onClick={refresh} disabled={state.busy}>Refresh</button>
+    <div className="toolbar">{actions.map((action) => <button className="button" key={action.label} disabled={state.busy} onClick={() => run(action)}>{t(action.label)}</button>)}
+      <button className="button secondary" onClick={refresh} disabled={state.busy}>{t("Refresh")}</button>
     </div>
-    {state.busy && <p className="feedback" role="status">Loading MediSafe data…</p>}
+    {state.busy && <p className="feedback" role="status">{t("Loading MediSafe data…")}</p>}
     <ErrorMessage message={state.error} />
     {state.notice && <p className="feedback success" role="status">{state.notice}</p>}
     {children?.({ ...state, refresh, run })}
     {!children && state.data && <pre className="data-view">{JSON.stringify(state.data, null, 2)}</pre>}
-    {!state.busy && !state.error && !state.data && <p className="empty-state">No record yet.</p>}
+    {!state.busy && !state.error && !state.data && <p className="empty-state">{t("No record yet.")}</p>}
   </Workspace>;
 }

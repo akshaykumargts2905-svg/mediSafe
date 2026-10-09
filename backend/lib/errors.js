@@ -1,6 +1,9 @@
 function sendError(res, error) {
-  if (error.status === 400 || error.status === 404) {
+  if ([400, 401, 403, 404, 409, 413, 415, 422, 429, 503, 504].includes(error.status)) {
     return res.status(error.status).json({ message: error.message });
+  }
+  if (error.name === "MulterError") {
+    return res.status(error.code === "LIMIT_FILE_SIZE" ? 413 : 400).json({ message: error.code === "LIMIT_FILE_SIZE" ? "Image must be 5 MB or smaller" : "Upload one image using the image field" });
   }
   if (error.code === "P2002") {
     return res.status(409).json({ message: "A record with these unique values already exists" });

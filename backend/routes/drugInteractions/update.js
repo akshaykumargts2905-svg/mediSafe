@@ -7,7 +7,7 @@ const sendError = require("../../lib/errors");
 router.put("/", async (req, res) => {
   try {
     const id = positiveInt(req.params.id);
-    const data = readFields(req.body, {"medicineAId":"id","medicineBId":"id","severity":"string","description":"string","recommendation":"string?"});
+    const data = readFields(req.body, {"medicineAId":"id","medicineBId":"id","severity":"severity","description":"string","recommendation":"string?","risk":"string?","descriptionHi":"string?","recommendationHi":"string?","riskHi":"string?","sourceUrl":"url?"});
     requireChanges(data);
     const existing = await prisma.drugDrugInteraction.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ message: "Interaction not found" });

@@ -12,7 +12,7 @@ const allowedOrigins = new Set((process.env.FRONTEND_ORIGINS || "http://localhos
 app.use(cors({
   origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)),
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization", "Accept-Language"],
 }));
 app.use(express.json({ limit: "1mb" }));
 
@@ -22,6 +22,11 @@ app.use("/api/auth/login", require("./routes/auth/login"));
 
 // All remaining API routes require a verified, existing user.
 app.use("/api", authenticate);
+app.use("/api", require("./lib/localization").localizationMiddleware);
+app.use("/api/doctor", require("./lib/access").requireDoctor);
+app.use("/api/care-team", require("./routes/careTeam/getAll"));
+app.use("/api/care-team", require("./routes/careTeam/grant"));
+app.use("/api/care-team/:doctorId", require("./routes/careTeam/revoke"));
 app.use(
   [
     "/api/medicines",
@@ -35,10 +40,13 @@ app.use("/api/users/me", require("./routes/users/getMe"));
 app.use("/api/users/me", require("./routes/users/updateMe"));
 app.use("/api/users/me", require("./routes/users/deleteMe"));
 app.use("/api/prescriptions", require("./routes/prescriptions/create"));
+app.use("/api/prescriptions/upload", require("./routes/prescriptions/upload"));
+app.use("/api/prescriptions/:id/image", require("./routes/prescriptions/image"));
 app.use("/api/prescriptions", require("./routes/prescriptions/getAll"));
 app.use("/api/prescriptions/:id", require("./routes/prescriptions/getById"));
 app.use("/api/prescriptions/:id", require("./routes/prescriptions/delete"));
 app.use("/api/ocr/process/:prescriptionId", require("./routes/ocr/process"));
+app.use("/api/ocr/:prescriptionId/confirm", require("./routes/ocr/confirm"));
 app.use("/api/ocr/:prescriptionId", require("./routes/ocr/update"));
 app.use("/api/ocr/:prescriptionId", require("./routes/ocr/getByPrescription"));
 app.use("/api/medicines", require("./routes/medicines/create"));

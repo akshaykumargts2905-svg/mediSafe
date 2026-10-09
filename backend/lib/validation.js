@@ -37,7 +37,21 @@ function readFields(body, rules, required = []) {
       continue;
     }
     const type = rule.replace("?", "");
-    if (type === "id") {
+    if (type === "severity") {
+      if (typeof value !== "string" || !["LOW", "MODERATE", "HIGH", "CRITICAL"].includes(value.toUpperCase())) throw badRequest("severity must be LOW, MODERATE, HIGH or CRITICAL");
+      data[field] = value.toUpperCase();
+    } else if (type === "language") {
+      if (!["en", "hi"].includes(value)) throw badRequest("language must be en or hi");
+      data[field] = value;
+    } else if (type === "strings") {
+      if (!Array.isArray(value) || value.length > 30 || value.some((item) => typeof item !== "string" || !item.trim() || item.length > 120)) throw badRequest(field + " must be an array of up to 30 names");
+      data[field] = [...new Set(value.map((item) => item.trim()))];
+    } else if (type === "url") {
+      let url;
+      try { url = new URL(value); } catch { throw badRequest(field + " must be a valid URL"); }
+      if (typeof value !== "string" || value.length > 2048 || !["https:", "http:"].includes(url.protocol) || url.username || url.password) throw badRequest(field + " must use http or https without credentials");
+      data[field] = url.href;
+    } else if (type === "id") {
       data[field] = positiveInt(value, field);
     } else if (type === "boolean") {
       if (typeof value !== "boolean") throw badRequest(field + " must be a boolean");
@@ -51,6 +65,7 @@ function readFields(body, rules, required = []) {
       if (typeof value !== "string" || !value.trim()) {
         throw badRequest(field + " must be a non-empty string");
       }
+      if (value.length > (field === "extractedText" ? 50000 : 10000)) throw badRequest(field + " is too long");
       data[field] = type === "password" ? value : value.trim();
       if (type === "email") {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data[field])) {
@@ -70,7 +85,7 @@ function requireChanges(data) {
 }
 
 function idList(value, name) {
-  if (!Array.isArray(value)) throw badRequest(name + " must be an array of IDs");
+  if (!Array.isArray(value) || value.length > 500) throw badRequest(name + " must be an array of IDs");
   return [...new Set(value.map((id) => positiveInt(id, name)))];
 }
 

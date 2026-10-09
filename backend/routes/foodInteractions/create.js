@@ -6,7 +6,7 @@ const sendError = require("../../lib/errors");
 
 router.post("/", async (req, res) => {
   try {
-    const data = readFields(req.body, {"medicineId":"id","foodId":"id","severity":"string","description":"string","recommendation":"string?"}, ["medicineId","foodId","severity","description"]);
+    const data = readFields(req.body, {"medicineId":"id","foodId":"id","severity":"severity","description":"string","recommendation":"string?","risk":"string?","descriptionHi":"string?","recommendationHi":"string?","riskHi":"string?","sourceUrl":"url?"}, ["medicineId","foodId","severity","description"]);
     if (!await prisma.medicine.findUnique({ where: { id: data.medicineId } })) {
       return res.status(404).json({ message: "medicine not found" });
     }

@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router({ mergeParams: true });
 const prisma = require("../../lib/prisma");
 const { positiveInt, readFields } = require("../../lib/validation");
+const invalidate = require("../../lib/invalidateAnalysis");
 const sendError = require("../../lib/errors");
 
 router.post("/", async (req, res) => {
@@ -14,7 +15,11 @@ router.post("/", async (req, res) => {
     if (!await prisma.medicine.findUnique({ where: { id: data.medicineId } })) {
       return res.status(404).json({ message: "medicine not found" });
     }
-    const prescriptionMedicine = await prisma.prescriptionMedicine.create({ data });
+    const prescriptionMedicine = await prisma.$transaction(async (db) => {
+      const row = await db.prescriptionMedicine.create({ data });
+      await invalidate(db, data.prescriptionId);
+      return row;
+    }, { isolationLevel: "Serializable", timeout: 30000 });
     return res.status(201).json({ prescriptionMedicine });
   } catch (error) {
     return sendError(res, error);

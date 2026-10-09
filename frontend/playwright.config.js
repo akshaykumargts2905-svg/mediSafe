@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
-  timeout: 480000,
+  timeout: 900000,
   expect: { timeout: 20000 },
   workers: 1,
   use: { baseURL: "http://localhost:3100", channel: process.env.E2E_BROWSER_CHANNEL || undefined, headless: true, actionTimeout: 30000, navigationTimeout: 45000, screenshot: "only-on-failure" },

@@ -14,7 +14,7 @@ const originalFindUser = prisma.user.findUnique;
 let server;
 let base;
 before(async () => {
-  prisma.user.findUnique = async () => ({ id: 1 });
+  prisma.user.findUnique = async () => ({ id: 1, role: "DOCTOR" });
   server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
   base = "http://127.0.0.1:" + server.address().port;
@@ -37,7 +37,7 @@ async function request(method, url, body, headers = {}) {
 test("every route has one handler, try/catch, and one unique method/path", () => {
   const source = fs.readFileSync(path.join(__dirname, "../server.js"), "utf8");
   const mounts = [...source.matchAll(/app\.use\(\s*"([^"]+)"\s*,\s*require\("\.\/routes\/([^"]+)"\),?\s*\);/g)];
-  assert.equal(mounts.length, 60);
+  assert.equal(mounts.length, 66);
   const endpoints = new Set();
   for (const [, url, file] of mounts) {
     const route = fs.readFileSync(path.join(__dirname, "../routes", file + ".js"), "utf8");
@@ -56,9 +56,9 @@ test("health, languages, translation and JSON 404", async () => {
   assert.equal((await request("GET", "/")).status, 200);
   const languages = await request("GET", "/api/languages");
   assert.deepEqual(languages.body.map((language) => language.code), ["en", "hi"]);
-  const translated = await request("POST", "/api/translate", { text: "Hello", language: "hi" });
+  const translated = await request("POST", "/api/translate", { text: "Hello", source: "en", language: "en" });
   assert.equal(translated.body.translatedText, "Hello");
-  assert.equal(translated.body.placeholder, true);
+  assert.equal(translated.body.method, "same-language");
   assert.equal((await request("POST", "/api/translate", { text: "Hello", language: "xx" })).status, 400);
   assert.equal((await request("GET", "/missing")).status, 404);
 });

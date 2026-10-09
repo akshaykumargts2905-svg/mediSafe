@@ -10,6 +10,7 @@ router.get("/", async (req, res) => {
     const medicine = await prisma.medicine.findUnique({
       where: { id },
       include: {
+        alternatives: { include: { alternativeMedicine: true, medicine: true } },
         interactionsAsA: { include: { medicineB: true } },
         interactionsAsB: { include: { medicineA: true } },
         foodInteractions: { include: { food: true } },

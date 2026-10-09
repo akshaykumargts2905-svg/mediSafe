@@ -4,10 +4,13 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "dev": "nodemon server.js",
+    "dev": "node --watch server.js",
     "start": "node server.js",
-    "test": "node --test tests/api.test.js tests/auth.test.js",
+    "test": "node --test tests/api.test.js tests/auth.test.js tests/clinical.test.js",
     "passwords:upgrade": "node scripts/hash-existing-passwords.js",
+    "catalog:seed": "node scripts/seed.js",
+    "ocr:setup": "node scripts/setup-ocr.js",
+    "doctor:grant": "node scripts/grant-doctor.js",
     "test:integration": "node --test tests/integration.test.js"
   },
   "keywords": [],
@@ -16,14 +19,21 @@
   "type": "commonjs",
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tesseract.js-data/hin": "^1.0.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^18.0.6",
     "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.3"
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.4.0",
+    "sharp": "^0.35.5",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14",
     "prisma": "^6.19.3"
+  },
+  "overrides": {
+    "deepmerge-ts": "8.0.2"
   }
 }
