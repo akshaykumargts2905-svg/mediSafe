@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import Workspace from "./Workspace";
 import ErrorMessage from "./ErrorMessage";
 import { useLanguage } from "../lib/i18n";
+import Icon from "./Icon";
 
 export default function ApiPanel({ title, description, endpoint, actions = [], allowMissing = false, children }) {
   const { language, t } = useLanguage();
@@ -53,7 +54,7 @@ export default function ApiPanel({ title, description, endpoint, actions = [], a
   }
   return <Workspace title={title} description={description}>
     <div className="toolbar">{actions.map((action) => <button className="button" key={action.label} disabled={state.busy} onClick={() => run(action)}>{t(action.label)}</button>)}
-      <button className="button secondary" onClick={refresh} disabled={state.busy}>{t("Refresh")}</button>
+      <button className="button secondary" onClick={refresh} disabled={state.busy}><Icon name="refresh" size={16} />{t("Refresh")}</button>
     </div>
     {state.busy && <p className="feedback" role="status">{t("Loading MediSafe data…")}</p>}
     <ErrorMessage message={state.error} />
